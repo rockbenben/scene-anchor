@@ -20,7 +20,7 @@
 | 平台 | Windows x64——开发与实测都在这上面。macOS（Universal）与 Ubuntu x86_64 能在 CI 上编译打包，但从未在真机上跑起来过，见「已知限制」|
 | 场景 | 仅主画布，副画布场景不进树，见「已知限制」 |
 | 界面语言 | 12 种，跟随 OBS 自身的语言设置 |
-| 安装 | 解压到 OBS 插件目录即可；macOS 安装包未签名，见「安装」 |
+| 安装 | Windows 用 `.zip` · macOS 用 `.pkg` 安装包（未签名，见「安装」）· Linux 用 `.deb` |
 
 ## 能做什么
 
@@ -53,7 +53,7 @@
 
 ## 安装
 
-从 [Releases](https://github.com/rockbenben/scene-anchor/releases) 下载对应平台的压缩包，解压到 OBS Studio 的插件目录（有安装包的平台也可以直接用安装包）。
+到 [Releases](https://github.com/rockbenben/scene-anchor/releases) 下载对应平台的文件：**Windows** 是 `.zip`，解压到 OBS Studio 的插件目录；**macOS** 是 `.pkg` 安装包；**Linux** 是 `.deb`（`sudo apt install ./scene-anchor-*.deb`）。
 
 **macOS：安装包未签名。** 双击 `.pkg` 会看到*「无法打开，因为它来自身份不明的开发者」*——改成右键选**打开**，或到系统设置 → 隐私与安全性里放行。这是安装包的事，不是插件的事：OBS 自己的 entitlements 里带着 `com.apple.security.cs.disable-library-validation`（`frontend/cmake/macos/entitlements.plist`），正是为了能加载第三方插件，所以未签名的插件装好之后照常加载。给安装包签名需要 Apple Developer ID，多数独立 OBS 插件作者不会去买——[obs-move-transition](https://github.com/exeldro/obs-move-transition)、[waveform](https://github.com/phandasm/waveform)、[obs-multi-rtmp](https://github.com/sorayuki/obs-multi-rtmp) 至今发的都是未签名的包。
 

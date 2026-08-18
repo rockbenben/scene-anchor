@@ -147,7 +147,7 @@ O(n)，n ≤ 数百。单 canvas 时不显示 canvas 分组层。自发操作用
 
 ## 8. 平台与 CI
 
-obs-plugintemplate 官方模板。Windows x64 zip / macOS universal pkg / Linux deb+tar.gz。`buildspec.json` 锁 obs-deps 与 Qt 版本。仅 OBS 32+。本地开发 Windows，三平台走 GitHub Actions。
+obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / macOS universal `.pkg` / Linux `.deb`（另出 `-dbgsym.ddeb` 与一份源码 `source.tar.xz`）——**Linux 没有 tar.gz**，早先这里写的 `deb+tar.gz` 是照抄模板文档、未经核对。`buildspec.json` 锁 obs-deps 与 Qt 版本。仅 OBS 32+。本地开发 Windows，三平台走 GitHub Actions。
 
 **pin 策略：锁最老的受支持目标，不锁最新。** 当前 obs-studio 32.0.2 + Qt 6.8.3。Qt 的二进制兼容是单向的——6.8 编的能在 6.9/6.10/6.11 运行时上加载，6.11 编的无法在 6.8 上加载。OBS 32.2 已换 Qt 6.11，若跟着升 pin，等于静默放弃全部 32.0 与 32.1 用户。libobs 同理：按 32.0.2 头文件编译，保证只调用整个受支持区间都存在的 API。仅当确需 32.1+ 才有的 API 时才抬 pin。已在 OBS 32.0.2 与 32.2.2 上分别验证加载与运行——**两次都在 Windows 上**。macOS 与 Linux 目标能在 CI 上编译打包，插件也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过；README 的「已知限制」里如实声明了这一点，别在发布材料里把「三平台出包」写成「三平台验证过」。
 

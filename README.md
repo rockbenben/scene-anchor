@@ -20,7 +20,7 @@
 | Platform | Windows x64 — developed and tested here. macOS (Universal) and Ubuntu x86_64 build and package in CI but have not been run on real hardware; see Limitations |
 | Scenes | Main canvas only — see Limitations |
 | Interface | 12 languages, follows OBS's own language setting |
-| Install | Unzip into the OBS plugin directory; macOS installer is unsigned, see Install |
+| Install | Windows `.zip` · macOS `.pkg` installer (unsigned, see Install) · Linux `.deb` |
 
 ## Features
 
@@ -53,7 +53,7 @@ Existing scene-tree plugins ([DigitOtter/obs_scene_tree_view](https://github.com
 
 ## Install
 
-Download the archive for your platform from [Releases](https://github.com/rockbenben/scene-anchor/releases) and extract it into your OBS Studio plugin directory (or use the platform installer if one is provided).
+Grab your platform's file from [Releases](https://github.com/rockbenben/scene-anchor/releases): **Windows** ships a `.zip` to unpack into your OBS Studio plugin directory, **macOS** a `.pkg` installer, **Linux** a `.deb` (`sudo apt install ./scene-anchor-*.deb`).
 
 **macOS: the installer is not signed.** Double-clicking the `.pkg` gets you *"cannot be opened because it is from an unidentified developer"* — right-click it and choose **Open** instead, or allow it under System Settings → Privacy & Security. This is about the installer, not the plugin: OBS ships `com.apple.security.cs.disable-library-validation` in its own entitlements (`frontend/cmake/macos/entitlements.plist`) precisely so it can load third-party plugins, so an unsigned plugin loads normally once installed. Signing the installer needs an Apple Developer ID, which most individual OBS plugin authors don't buy — [obs-move-transition](https://github.com/exeldro/obs-move-transition), [waveform](https://github.com/phandasm/waveform) and [obs-multi-rtmp](https://github.com/sorayuki/obs-multi-rtmp) all ship unsigned packages today.
 
