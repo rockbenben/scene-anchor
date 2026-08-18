@@ -340,7 +340,7 @@ bool AnchorModel::canDropMimeData(const QMimeData *data, Qt::DropAction, int, in
 			return false; // 场景不是容器
 		// 目标 canvas 必须与所有源一致——跨 canvas 移动无安全语义（canDropMimeData 层的第一道拒绝）
 		const auto arr = QJsonDocument::fromJson(data->data(QString::fromUtf8(kMime))).array();
-		for (const auto &v : arr)
+		for (const auto v : arr)
 			if (v.toObject()["canvas"].toString() != p->data(RoleCanvas).toString())
 				return false;
 	}
@@ -411,13 +411,13 @@ bool AnchorModel::dropMimeData(const QMimeData *data, Qt::DropAction, int row, i
 		bool any = false;
 		std::vector<NodePath> paths;
 		std::vector<QString> unplaced;
-		for (const auto &v : arr) {
+		for (const auto v : arr) {
 			const QJsonObject o = v.toObject();
 			if (o["canvas"].toString() != canvas)
 				continue; // 跨 canvas 项静默丢弃
 			if (o["placed"].toBool()) {
 				NodePath p;
-				for (const auto &pv : o["path"].toArray())
+				for (const auto pv : o["path"].toArray())
 					p.push_back(pv.toInt());
 				paths.push_back(std::move(p));
 			} else {

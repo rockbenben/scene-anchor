@@ -39,7 +39,7 @@ static std::unique_ptr<TreeNode> nodeFromJson(const QJsonObject &o)
 		n->type = TreeNode::Folder;
 		n->name = o["name"].toString();
 		n->expanded = o["expanded"].toBool(true);
-		for (const auto &v : o["children"].toArray())
+		for (const auto v : o["children"].toArray())
 			if (v.isObject())
 				if (auto c = nodeFromJson(v.toObject()))
 					n->children.push_back(std::move(c));
@@ -451,14 +451,14 @@ bool TreeStore::fromJson(const QString &json)
 	const QJsonObject cs = o["canvases"].toObject();
 	for (auto it = cs.begin(); it != cs.end(); ++it) {
 		TreeNode root;
-		for (const auto &nv : it.value().toObject()["tree"].toArray())
+		for (const auto nv : it.value().toObject()["tree"].toArray())
 			if (nv.isObject())
 				if (auto n = nodeFromJson(nv.toObject()))
 					root.children.push_back(std::move(n));
 		// 旧版本写过 co["expanded"]（画布标题行的折叠态）。标题行已不存在，读到就忽略。
 		roots_.emplace(it.key(), std::move(root));
 	}
-	for (const auto &v : o["mru"].toArray()) {
+	for (const auto v : o["mru"].toArray()) {
 		const QString s = v.toString();
 		if (!s.isEmpty())
 			mru_ << s;
