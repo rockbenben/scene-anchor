@@ -59,7 +59,13 @@ function(_setup_obs_studio)
   elseif(OS_MACOS)
     set(_cmake_generator "Xcode")
     set(_cmake_arch "-DCMAKE_OSX_ARCHITECTURES:STRING='arm64;x86_64'")
-    set(_cmake_extra "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    # 【偏离上游模板】追加 CMAKE_PROJECT_obs-studio_INCLUDE，理由见该文件内的注释：
+    # OBS 32 的 libobs-metal 是 Swift 目标，而 enable_language(Swift) 在被 ENABLE_PLUGINS=OFF
+    # 跳过的子目录里。_cmake_extra 在下面是不加引号展开的，列表会成为多个独立参数。
+    set(_cmake_extra
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}"
+        "-DCMAKE_PROJECT_obs-studio_INCLUDE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/macos/enable-swift.cmake"
+    )
   endif()
 
   message(STATUS "Configure ${label} (${arch})")
