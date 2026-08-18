@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="SceneAnchor">
+  <!-- SceneAnchor 标记
+       原生 16px 网格、纯色填充、无渐变无描边——与 data/icons 里的插件图标同一套语言。
+       构成即产品本身：左侧竖脊是树的缩进导引线（"锚"落在这里，不画船锚），
+       右侧三条行是一个父项带两个缩进子项，最下面那条带强调色 = 颜色标签。
+       选它是因为它是唯一在 16px 仍然读得出层级的方案（另测过方括号+方块、
+       极简单行、文件夹造型三种，小尺寸下都糊成一团）。
+
+       墨色 #5E7B78 是**固定值**，不用 currentColor：这个文件只以 <img> 被引用
+       （README 两份、论坛资源页），而 <img> 里的 SVG 是独立文档，currentColor
+       拿不到宿主的前景色，只会落到默认的黑——GitHub 暗色主题下就此消失。
+       这个值对白底 4.6:1、对 GitHub 暗底 #0d1117 4.1:1，两边都过 3:1 的图形下限，
+       色相偏向强调色，与 #2FB8A8 同族。改它之前先两种底色各渲一次。
+       assets/social-card.html 里内联了同一份形状，那边继承 .brand 的 color，
+       currentColor 是对的——改几何要改两处，改颜色只改这里。 -->
+  <g fill="#5E7B78">
+    <rect x="2" y="2" width="2" height="12"/>
+    <rect x="5" y="2" width="9" height="2"/>
+    <rect x="7" y="7" width="7" height="2"/>
+  </g>
+  <rect x="7" y="12" width="7" height="2" fill="#2FB8A8"/>
+</svg>

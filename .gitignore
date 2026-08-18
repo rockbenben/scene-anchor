@@ -1,0 +1,35 @@
+# Exclude everything
+/*
+
+# Except for default project files
+!/.github
+!/build-aux
+!/cmake
+!/data
+!/src
+!.clang-format
+!.gersemirc
+!.gitignore
+!buildspec.json
+!CMakeLists.txt
+!CMakePresets.json
+!LICENSE
+!README.md
+# 第二语言 README 放根目录（skill 规范：只用点号分隔、BCP-47 小写）
+!README.zh.md
+!/docs
+!/tests
+# 本地校验脚本（不参与构建，也不进发行包）
+!/tools
+# 品牌素材：README 首屏直接引用 assets/logo.svg 与 assets/social-card.png，
+# 不放行的话 GitHub 上是两张裂图。不参与构建，也不进发行包。
+!/assets
+
+# Exclude lock files
+*.lock.json
+
+# Exclude macOS legacy resource forks
+.DS_Store
+
+# Exclude CMake build number cache
+/cmake/.CMakeBuildNumber

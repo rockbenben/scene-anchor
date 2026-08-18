@@ -1,0 +1,104 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SceneAnchor social card</title>
+<!--
+  GitHub social preview 源文件，1280×640。用 headless Chrome 截成 PNG：
+    chrome --headless --screenshot=social-card.png --window-size=1280,640 social-card.html
+
+  设计取舍：不做「logo + 渐变底 + 大标题」那套通用卡。右半边是插件真实界面的
+  忠实还原——OBS 用户一眼认得那个 dock，比任何抽象图形都说明问题，而且它是诚实的：
+  卡上画的就是装完之后看到的东西。左半边只放名字、slogan 和三条可验证的事实。
+  底色 #272A33 不是随便挑的深色，是从真机截图里取到的树视图实际背景。
+-->
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    width:1280px; height:640px; overflow:hidden; display:flex;
+    background:#272A33; color:#E8EAF0;
+    font:400 16px/1.5 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* 左：文字 */
+  .left { flex:0 0 640px; padding:0 40px 0 76px; display:flex; flex-direction:column; justify-content:center; }
+  .brand { display:flex; align-items:center; gap:16px; }
+  .brand svg { width:44px; height:44px; color:#E8EAF0; }
+  .wordmark { font-size:38px; font-weight:650; letter-spacing:-.8px; }
+  .wordmark em { font-style:normal; font-weight:300; opacity:.62; }
+
+  .slogan { margin-top:38px; font-size:52px; line-height:1.12; font-weight:600; letter-spacing:-1.4px; }
+  .slogan b { color:#2FB8A8; font-weight:600; }
+  .sub { margin-top:22px; font-size:19px; line-height:1.55; opacity:.6; max-width:470px; }
+
+  .facts { margin-top:58px; display:flex; gap:34px; }
+  .fact { font-size:14px; line-height:1.45; opacity:.5; }
+  .fact b { display:block; font-size:15px; opacity:1; font-weight:600; color:#E8EAF0; margin-bottom:3px; }
+
+  /* 右：真实 dock 还原 */
+  .right { flex:1; display:flex; align-items:center; justify-content:center; }
+  .dock {
+    width:424px; background:#2B2E38; border:1px solid #1c1e25; border-radius:5px;
+    box-shadow:0 26px 60px rgba(0,0,0,.42); overflow:hidden;
+  }
+  .titlebar { padding:11px 14px; font-size:14px; font-weight:600; background:#31343F; color:#D8DBE4; }
+  .search { margin:9px 10px 0; padding:8px 11px; border-radius:3px; background:#22242C; color:#7A7F8C; font-size:13.5px; }
+  .mru { display:flex; gap:6px; padding:10px 10px 4px; }
+  .chip { padding:5px 10px; border:1px solid #414654; border-radius:3px; font-size:12.5px; color:#C6CAD4; white-space:nowrap; }
+  .tree { padding:6px 0 10px; }
+  .row { display:flex; align-items:center; gap:8px; padding:5px 12px; font-size:13.5px; white-space:nowrap; }
+  .row.hdr { color:#767B88; font-size:13px; }
+  .row.sel { background:#3A3E4B; font-weight:700; }
+  /* 每层祖先一条竖导引线，宽度等于插件里的 indentation（16 逻辑像素） */
+  .g, .g0 { flex:0 0 16px; align-self:stretch; position:relative; }
+  .g::before { content:''; position:absolute; left:7px; top:-5px; bottom:-5px;
+               border-left:1px solid rgba(216,219,228,.13); }
+  .ico { width:15px; height:15px; flex:0 0 15px; }
+  .caret { width:16px; height:12px; flex:0 0 16px; color:#D8DBE4; opacity:.78; }
+  .toolbar { display:flex; gap:6px; padding:9px 11px; border-top:1px solid #23252d; }
+  .btn { width:26px; height:26px; border-radius:3px; background:#363A46; display:flex; align-items:center; justify-content:center; }
+  .btn svg { width:13px; height:13px; color:#C6CAD4; }
+</style>
+<body>
+  <div class="left">
+    <div class="brand">
+      <svg viewBox="0 0 16 16"><g fill="currentColor"><rect x="2" y="2" width="2" height="12"/><rect x="5" y="2" width="9" height="2"/><rect x="7" y="7" width="7" height="2"/></g><rect x="7" y="12" width="7" height="2" fill="#2FB8A8"/></svg>
+      <div class="wordmark">Scene<em>Anchor</em></div>
+    </div>
+
+    <div class="slogan">Scene folders<br>that <b>stay put.</b></div>
+    <div class="sub">Put a scene in a folder and it stays there — through collection copies, renames, exports, OBS updates, even uninstalling the plugin.</div>
+
+    <div class="facts">
+      <div class="fact"><b>Stored in the collection</b>Not a side file keyed<br>by collection name</div>
+      <div class="fact"><b>Public API only</b>No private Qt slots,<br>no findChild</div>
+      <div class="fact"><b>OBS 32+</b>Verified on 32.0.2<br>and 32.2.2</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="dock">
+      <div class="titlebar">SceneAnchor</div>
+      <div class="search">Search scenes and folders</div>
+      <div class="mru">
+        <div class="chip">Starting soon</div>
+        <div class="chip">Webcam full</div>
+        <div class="chip">BRB</div>
+      </div>
+      <div class="tree">
+        <div class="row"><svg class="caret" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5 8 8l3.5-3.5"/></svg><svg class="ico" viewBox="0 0 16 16"><path fill="#E0575C" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.2c.4 0 .8.16 1.06.44L8.6 3.28c.1.1.24.16.38.16H13A1.5 1.5 0 0 1 14.5 4.94V12A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V3z"/></svg>Opening</div>
+        <div class="row"><i class="g"></i><i class="g0"></i><svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="#d0d0d0" stroke-width="1.4"/><path fill="#d0d0d0" d="M3.6 11.4 6.3 7.9l2 2.3 2.1-2.9 2.1 4.1z"/></svg>Starting soon</div>
+        <div class="row"><i class="g"></i><i class="g0"></i><svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="#d0d0d0" stroke-width="1.4"/><path fill="#d0d0d0" d="M3.6 11.4 6.3 7.9l2 2.3 2.1-2.9 2.1 4.1z"/></svg>Countdown</div>
+        <div class="row"><svg class="caret" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5 8 8l3.5-3.5"/></svg><svg class="ico" viewBox="0 0 16 16"><path fill="#D9A61C" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.2c.4 0 .8.16 1.06.44L8.6 3.28c.1.1.24.16.38.16H13A1.5 1.5 0 0 1 14.5 4.94V12A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V3z"/></svg>Live</div>
+        <div class="row sel"><i class="g"></i><i class="g0"></i><svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="#d0d0d0" stroke-width="1.4"/><path fill="#d0d0d0" d="M3.6 11.4 6.3 7.9l2 2.3 2.1-2.9 2.1 4.1z"/></svg>Webcam full</div>
+        <div class="row"><i class="g"></i><i class="g0"></i><svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="#3FBFA8" stroke-width="1.4"/><path fill="#3FBFA8" d="M3.6 11.4 6.3 7.9l2 2.3 2.1-2.9 2.1 4.1z"/></svg>Gameplay</div>
+        <div class="row"><i class="g"></i><svg class="caret" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5 8 8l3.5-3.5"/></svg><svg class="ico" viewBox="0 0 16 16"><path fill="#4A9BE8" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.2c.4 0 .8.16 1.06.44L8.6 3.28c.1.1.24.16.38.16H13A1.5 1.5 0 0 1 14.5 4.94V12A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V3z"/></svg>Camera angles</div>
+        <div class="row"><i class="g"></i><i class="g"></i><i class="g0"></i><svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="#d0d0d0" stroke-width="1.4"/><path fill="#d0d0d0" d="M3.6 11.4 6.3 7.9l2 2.3 2.1-2.9 2.1 4.1z"/></svg>Gameplay + cam</div>
+        <div class="row"><i class="g0"></i><svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="#8E7BD4" stroke-width="1.4"/><path fill="#8E7BD4" d="M3.6 11.4 6.3 7.9l2 2.3 2.1-2.9 2.1 4.1z"/></svg>BRB</div>
+      </div>
+      <div class="toolbar">
+        <div class="btn"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M7 3h2v10H7z"/><path fill="currentColor" d="M3 7h10v2H3z"/></svg></div>
+        <div class="btn"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M1.5 3A1.5 1.5 0 0 1 3 1.5h3.2c.4 0 .8.16 1.06.44L8.6 3.28c.1.1.24.16.38.16H13A1.5 1.5 0 0 1 14.5 4.94V12A1.5 1.5 0 0 1 13 13.5H3A1.5 1.5 0 0 1 1.5 12V3z"/></svg></div>
+        <div class="btn"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M3 7h10v2H3z"/></svg></div>
+      </div>
+    </div>
+  </div>
+</body>
