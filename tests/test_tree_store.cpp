@@ -353,6 +353,35 @@ static void test_projection()
 		auto plan = planProjection(s, live);
 		CHECK(plan.size() == 1 && !R(plan, 0).placed);
 	}
+	{ // 未归类尾区的表头：只在「真有未归类」且「调用方给了文案」时出现，且紧贴那一段之前
+		TreeStore s;
+		CHECK(s.insertFolder("cv1", {}, 0, "A"));
+		CHECK(s.placeScene("cv1", "m", {0}, 0));
+		std::vector<LiveCanvas> live{
+			{QStringLiteral("cv1"),
+			 QStringLiteral("主"),
+			 {{QStringLiteral("m"), QStringLiteral("M")}, {QStringLiteral("free"), QStringLiteral("F")}}}};
+		auto plan = planProjection(s, live, QStringLiteral("未归类"));
+		CHECK(plan.size() == 4);
+		CHECK(R(plan, 2).kind == RowPlan::Header && R(plan, 2).depth == 0);
+		CHECK(R(plan, 2).name == QStringLiteral("未归类"));
+		CHECK(R(plan, 2).uuid.isEmpty() && R(plan, 2).path.empty() && !R(plan, 2).placed);
+		CHECK(R(plan, 3).uuid == QStringLiteral("free") && R(plan, 3).kind == RowPlan::Scene);
+
+		// 全都归好类 → 不该凭空多一条「未归类」（那是一段空标题，读起来像坏了）
+		TreeStore all;
+		CHECK(all.insertFolder("cv1", {}, 0, "A"));
+		CHECK(all.placeScene("cv1", "m", {0}, 0));
+		std::vector<LiveCanvas> oneLive{
+			{QStringLiteral("cv1"), QStringLiteral("主"), {{QStringLiteral("m"), QStringLiteral("M")}}}};
+		auto plan2 = planProjection(all, oneLive, QStringLiteral("未归类"));
+		CHECK(plan2.size() == 2);
+		for (const auto &r : plan2)
+			CHECK(r.kind != RowPlan::Header);
+
+		// 没给文案（单元测试与旧调用方）→ 行为与加表头之前完全一致
+		CHECK(planProjection(s, live).size() == 3);
+	}
 	{ // 同一 canvas 树内重复 uuid（畸形持久化数据）只渲染一行
 		TreeStore s;
 		s.fromJson(QStringLiteral(

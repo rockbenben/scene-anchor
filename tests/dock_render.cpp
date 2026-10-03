@@ -458,8 +458,8 @@ static void seedStore(TreeStore &store, const QString &cv)
 	store.placeScene(cv, "s-scrcpy", {1}, INT_MAX);
 	store.setColor(cv, {1, 1}, "#c19c00");
 	store.insertFolder(cv, {}, 2, folder4); // 空文件夹
-	store.placeScene(cv, "s-test", {}, INT_MAX);
-	store.placeScene(cv, "s-multi", {}, INT_MAX);
+	// s-test / s-multi 故意不 placeScene：留在 OBS 里但从没被拖进任何地方，走的才是
+	// 投影里那条「未归类尾区」（放在根 ≠ 未归类，planProjection 里不是一回事）。
 	for (const char *u : {"s-yy", "s-screen", "s-study", "s-scrcpy", "s-talk"})
 		store.touchMru(QString::fromUtf8(u), 5);
 }
@@ -816,6 +816,7 @@ int main(int argc, char **argv)
 		// refreshMru 用 deleteLater 摘旧 chip，不冲掉 DeferredDelete 就会把上一轮宽度的
 		// 残留 chip 一起数进来（台账会虚高）
 		QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		dock->layout()->activate(); // 不激活就量到上一次 resize 的中间态
 		metricsAt(dock, w);
 		if (w == 320)
 			dumpRowColors(dock);

@@ -848,7 +848,8 @@ void TreeDock::rebuild()
 
 	auto *b = ObsBridge::get();
 	const auto live = b->liveCanvases();
-	const auto plan = planProjection(b->store, live);
+	const auto plan =
+		planProjection(b->store, live, QString::fromUtf8(obs_module_text("SceneAnchor.UnfiledHeader")));
 
 	model_->removeRows(0, model_->rowCount());
 	// 行高钉成「图标高与字体高的较大值 + 1」，与图标开不开无关。不钉的话关掉图标
@@ -897,7 +898,11 @@ void TreeDock::rebuild()
 		// 两边一起关最干净：同层共用一条左边界、子项必然比父项靠右、宽度一分不浪费。
 		// 代价是空文件夹失去图标标识。拖放时不受影响：canDropMimeData 对场景返回 false，
 		// 只有文件夹会出现「落入」指示框，所以拖的时候仍分得清，未做额外补偿。
-		if (icons) {
+		if (r.kind == RowPlan::Header) {
+			// 表头不染色、不给图标：它是段落标题，不是可切换的东西。用调色板的
+			// 占位色压暗一档，与 OBS 自己的分组标题同一读感。
+			item->setForeground(view_->palette().color(QPalette::PlaceholderText));
+		} else if (icons) {
 			const QIcon &base = r.kind == RowPlan::Folder ? folderIcon : sceneIcon;
 			item->setIcon(tag.isValid() ? tintedIcon(base, tag) : base);
 		} else if (tagText.isValid()) {
@@ -909,11 +914,10 @@ void TreeDock::rebuild()
 		parents[r.depth]->appendRow(item);
 		parents.resize(r.depth + 1);
 		parents.push_back(item);
-		if (r.kind != RowPlan::Scene)
-			expandStates.push_back({item, r.expanded});
-		if (r.kind == RowPlan::Folder)
+		if (r.kind == RowPlan::Folder) {
 			++folderRows;
-		else if (r.kind == RowPlan::Scene) {
+			expandStates.push_back({item, r.expanded});
+		} else if (r.kind == RowPlan::Scene) {
 			++sceneRows;
 			if (!r.placed)
 				++unfiledRows;

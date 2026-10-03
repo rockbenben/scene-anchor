@@ -35,7 +35,7 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 
 **已知灰区**（README 声明）：转场覆盖用 `obs_source_get_private_settings` 的 `"transition"`/`"transition_duration"` key，多画面显隐用 `"show_in_multiview"`——API 公开但 key 是前端约定。多画面投影开着时切显隐不能即时刷新（无公开刷新入口），下次重建生效。
 
-## 3. 架构（5 个翻译单元，约 3000 行含头文件）
+## 3. 架构（6 个翻译单元，约 3200 行含头文件）
 
 | 文件 | 职责 |
 |---|---|
@@ -43,6 +43,7 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 | `tree_dock.{h,cpp}` | QWidget dock（`obs_frontend_add_dock_by_id`）。搜索框 + MRU 条 + QTreeView + 工具栏。从 TreeStore 全量重建投影到 QStandardItemModel |
 | `obs_bridge.{h,cpp}` | 所有 libobs/frontend 调用集中于此：事件回调、save/load 回调、场景操作、undo 注册 |
 | `projection.{h,cpp}` | TreeStore 的树 → 扁平行序列（`RowPlan`）。抽出来是为了让「哪些行、什么层级、什么顺序」能脱离 Qt 单独测；dock 只负责把行画出来 |
+| `contrast.{h,cpp}` | WCAG 相对亮度、对比度与「把色调到对一组背景都达标」的求解。同 `projection` 的理由：能脱离 libobs 与 Widgets 单测（只需 Core+Gui 的 QColor） |
 | `module.cpp` | `obs_module_load/unload` + 全局单例 |
 
 依赖：libobs、obs-frontend-api、Qt6::Widgets。无第三方库。
@@ -64,7 +65,7 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 ```
 
 **所有权规则**：
-- store 只记录用户主动放置过的条目。未放置的场景 → 重建时按 OBS 原始顺序追加在树底部「未归类」尾区（纯视图层，不写入 store）。拖进文件夹的那一刻才进 store。
+- store 只记录用户主动放置过的条目。未放置的场景 → 重建时按 OBS 原始顺序追加在树底部「未归类」尾区（纯视图层，不写入 store）。拖进文件夹的那一刻才进 store。这一段现在有一条不可选、不可编辑、但能作为放置目标的表头行（`RowPlan::Header`，文案 `SceneAnchor.UnfiledHeader`）标出「哪些还没整理」——此前它与文件夹外的场景行同缩进同图标，唯一的区别是位置，用户扫不出来。
 - 场景引用**以 UUID 为主键、场景名为回退解析器**（`uuid` + `name` 两个字段都存）。改名因此是零成本事件（uuid 存活，永不走回退）。
 
   **为什么必须有回退**：OBS 32.0.2 复制场景集合时（`SetupDuplicateSceneCollection`，`frontend/widgets/OBSBasic_SceneCollections.cpp:159-205`）会对 `sources` 数组逐项执行 `obs_data_set_string(data, "uuid", os_generate_uuid())` —— **每个场景都换新 uuid**。而 `modules` blob 随文件整份拷贝、内容不被触碰。若只认 uuid，复制后整棵树的场景全部变僵尸被清除，本文档 §1 差异点 1 的旗舰主张即为假。
@@ -96,7 +97,7 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 
 1. `obs_frontend_get_canvases` → 每 canvas `obs_canvas_enum_scenes` 得 (uuid, name) 活跃集
 2. 走 store 树：folder → 建节点；scene-uuid ∈ 活跃集 → 建节点（名字取实时值）标记已消费；∉ → 跳过（store 保留）
-3. 活跃集未消费残余 → 未归类尾区
+3. 活跃集未消费残余 → 未归类尾区（有残余时先插一条 `Header` 表头行）
 4. 恢复展开态（store）、选中（按 UUID）、滚动位置；高亮当前场景
 
 O(n)，n ≤ 数百。单 canvas 时不显示 canvas 分组层。自发操作用布尔重入锁挡事件重建（如建场景：create → 拿 uuid → store 插入 → 重建）。
@@ -163,7 +164,7 @@ obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / m
 
 - **单元**：`test_tree_store` 只链 `Qt6::Core`——不链 libobs，也不链 Qt Widgets，因而在任何装了 Qt 的机器上都能跑。覆盖两块——
   - `TreeStore`：序列化往返、load 清僵尸、会话内保僵尸、多选移动顺序、版本护栏原样写回、未归类不入 store
-  - `planProjection`：僵尸跳过、未归类追加在尾、名字取实时值、外来版本全平铺、畸形数据里重复 uuid 只渲染一行，以及**内容恒从 depth 0 起**——这一条锁的是「副画布不进树」在投影侧的表现：不因画布这个概念多出任何一行、也不多缩进一级
+  - `planProjection`：僵尸跳过、未归类追加在尾、**表头只在「有未归类」且「调用方给了文案」时出现**（两者缺一就不该凭空多一条空标题）、名字取实时值、外来版本全平铺、畸形数据里重复 uuid 只渲染一行，以及**内容恒从 depth 0 起**——这一条锁的是「副画布不进树」在投影侧的表现：不因画布这个概念多出任何一行、也不多缩进一级
 - **UI 量具** `tests/ux_probe.cpp`（`EXCLUDE_FROM_ALL`，不进 ctest）：离屏构造各部件，量 `minimumSizeHint` 与真实布局结果，用于回答"这个 dock 能被拖到多窄"这类问题。MRU 顶死 dock 最小宽度那个缺陷就是它量出来的
 - **手动清单**（发布前）：复制集合 / 切换集合 / 重命名集合 / 强杀 OBS 四杀手场景 + Studio 模式 + 主题明暗切换
 
