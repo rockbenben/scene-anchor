@@ -8,6 +8,7 @@
 #include <QColorDialog>
 #include <QDockWidget>
 #include <QFont>
+#include <QFrame>
 #include <QFontMetrics>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -84,9 +85,13 @@ static QIcon anchorPlusIcon(bool dark)
 {
 	return anchorIcon(dark ? "icons/plus_dark.svg" : "icons/plus_light.svg");
 }
-static QIcon anchorMinusIcon(bool dark)
+static QIcon anchorTrashIcon(bool dark)
 {
-	return anchorIcon(dark ? "icons/minus_dark.svg" : "icons/minus_light.svg");
+	return anchorIcon(dark ? "icons/trash_dark.svg" : "icons/trash_light.svg");
+}
+static QIcon anchorDotsIcon(bool dark)
+{
+	return anchorIcon(dark ? "icons/dots_dark.svg" : "icons/dots_light.svg");
 }
 
 // MRU chip 的宽度上限。量具 tests/ux_probe.cpp 实测：不设上限时五个中文场景名的 chip
@@ -540,11 +545,33 @@ TreeDock::TreeDock()
 	btnAddFolder_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.AddFolder")));
 	btnRemove_ = new QToolButton(this);
 	btnRemove_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Remove")));
+	btnSettings_ = new QToolButton(this);
+	btnSettings_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Display")));
+	btnSettings_->setPopupMode(QToolButton::InstantPopup);
+	// 「造」的两枚与「毁」的一枚之间加一条分隔：此前三个 25×25 的按钮同权重并排，
+	// 而其中一枚点下去对文件夹是静默解散结构、对场景是弹确认框——后果最重的那个
+	// 长得和最轻的一样。删除键同时换成垃圾桶形（'-' 容易被读成「折叠」）。
+	// 右侧的 ⋯ 是行为/显示开关的第二个入口：它们此前只在「对着树空白处右键」时
+	// 才摸得到，而 dock 上没有任何线索指向那里。
+	auto *sep = new QFrame(this);
+	sep->setFrameShape(QFrame::VLine);
+	sep->setFixedHeight(18);
 	btnRow->addWidget(btnAddScene_);
 	btnRow->addWidget(btnAddFolder_);
+	btnRow->addSpacing(4);
+	btnRow->addWidget(sep);
+	btnRow->addSpacing(4);
 	btnRow->addWidget(btnRemove_);
 	btnRow->addStretch();
+	btnRow->addWidget(btnSettings_);
 	lay->addLayout(btnRow);
+	// 菜单在弹出前现建：三个开关的勾选态与双击模式都是即时值，构造时填一次就会常驻旧值。
+	auto *settingsMenu = new QMenu(btnSettings_);
+	connect(settingsMenu, &QMenu::aboutToShow, this, [this, settingsMenu] {
+		settingsMenu->clear();
+		buildSettingsMenu(*settingsMenu);
+	});
+	btnSettings_->setMenu(settingsMenu);
 
 	auto *b = ObsBridge::get();
 	// 必须是 QueuedConnection，不是风格偏好，是承重的（论坛用户 alladjex 的 c0000005 崩溃）。
@@ -815,7 +842,15 @@ void TreeDock::rebuild()
 	// 另两个按钮同理：构造函数里设一次会在切主题后留下错色图标。
 	btnAddFolder_->setIcon(folderIcon);
 	btnAddScene_->setIcon(anchorPlusIcon(darkIcons));
-	btnRemove_->setIcon(anchorMinusIcon(darkIcons));
+	btnRemove_->setIcon(anchorTrashIcon(darkIcons));
+	btnSettings_->setIcon(anchorDotsIcon(darkIcons));
+	// 删除键带一圈危险色描边。颜色不写死：从预设红出发，按**按钮自己画在什么上**
+	// 调过对比度，明暗主题与 System 都成立（写死 #C01C37 会在浅色主题上糊成一片）。
+	{
+		const QColor btnBg = btnRemove_->palette().color(QPalette::Button);
+		const QColor danger = readableOn(QColor("#d13438"), {btnBg, viewBg}, kMinContrast);
+		btnRemove_->setStyleSheet(QStringLiteral("QToolButton { border: 1px solid %1; }").arg(danger.name()));
+	}
 
 	// 保存视图状态。Folder 行的 RoleUuid 恒为空（J-7）：只存 selUuid 会让选中文件夹时
 	// selUuid 取到空串，下面的恢复逻辑会静默回落到"当前场景"——本任务首次能建文件夹，此缺陷随即可达。
@@ -1461,46 +1496,54 @@ void TreeDock::onContextMenu(const QPoint &pos)
 		QAction *addS = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.AddScene")));
 		connect(addS, &QAction::triggered, btnAddScene_, &QToolButton::click);
 		menu.addSeparator();
-		QMenu *dc = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.DoubleClick")));
-		const QString cur = b->doubleClickMode();
-		for (const auto &[key, label] :
-		     {std::pair<QString, QString>{QStringLiteral("transition"),
-						  QString::fromUtf8(obs_module_text("SceneAnchor.DC.Transition"))},
-		      {QStringLiteral("rename"), QString::fromUtf8(obs_module_text("SceneAnchor.DC.Rename"))},
-		      {QStringLiteral("none"), QString::fromUtf8(obs_module_text("SceneAnchor.DC.None"))}}) {
-			QAction *a = dc->addAction(label);
-			a->setCheckable(true);
-			a->setChecked(key == cur);
-			const QString k = key;
-			connect(a, &QAction::triggered, this, [b, k] { b->setDoubleClickMode(k); });
-		}
-
-		// 「选中即切换」与双击动作并列——两者都是"这个手势做什么"，属同一类。
-		QAction *sel = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SelectSwitches")));
-		sel->setCheckable(true);
-		sel->setChecked(b->option(kOptSelectSwitches.key, kOptSelectSwitches.def));
-		connect(sel, &QAction::triggered, this, [b](bool on) { b->setOption(kOptSelectSwitches.key, on); });
-
-		// 显示类选项单开一组：改的是画什么，不是手势做什么。两项都要 rebuild/refresh 才可见。
-		QMenu *disp = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Display")));
-		QAction *mru = disp->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.ShowMru")));
-		mru->setCheckable(true);
-		mru->setChecked(b->option(kOptShowMru.key, kOptShowMru.def));
-		connect(mru, &QAction::triggered, this, [this, b](bool on) {
-			b->setOption(kOptShowMru.key, on);
-			refreshMru();
-			// 条出现/消失会把整棵树推上下移，正读着的那一行会跑出可视区；
-			// 不保留占位（那是为一条已被用户关掉的功能永久扣住 24px），只把选中行带回视野。
-			if (view_->currentIndex().isValid())
-				view_->scrollTo(view_->currentIndex());
-		});
-		QAction *ico = disp->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SceneIcons")));
-		ico->setCheckable(true);
-		ico->setChecked(b->option(kOptIcons.key, kOptIcons.def));
-		connect(ico, &QAction::triggered, this, [this, b](bool on) {
-			b->setOption(kOptIcons.key, on);
-			rebuild();
-		});
+		buildSettingsMenu(menu);
 	}
 	menu.exec(view_->viewport()->mapToGlobal(pos));
+}
+
+// 三个「这个 dock 怎么用」的开关。空白区右键菜单和底部 ⋯ 按钮共用这一份构造：
+// 开关此前只有右键一个入口，而那个入口在界面上没有任何线索，等于没有。
+void TreeDock::buildSettingsMenu(QMenu &menu)
+{
+	auto *b = ObsBridge::get();
+	QMenu *dc = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.DoubleClick")));
+	const QString cur = b->doubleClickMode();
+	for (const auto &[key, label] :
+	     {std::pair<QString, QString>{QStringLiteral("transition"),
+					  QString::fromUtf8(obs_module_text("SceneAnchor.DC.Transition"))},
+	      {QStringLiteral("rename"), QString::fromUtf8(obs_module_text("SceneAnchor.DC.Rename"))},
+	      {QStringLiteral("none"), QString::fromUtf8(obs_module_text("SceneAnchor.DC.None"))}}) {
+		QAction *a = dc->addAction(label);
+		a->setCheckable(true);
+		a->setChecked(key == cur);
+		const QString k = key;
+		connect(a, &QAction::triggered, this, [b, k] { b->setDoubleClickMode(k); });
+	}
+
+	// 「选中即切换」与双击动作并列——两者都是"这个手势做什么"，属同一类。
+	QAction *sel = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SelectSwitches")));
+	sel->setCheckable(true);
+	sel->setChecked(b->option(kOptSelectSwitches.key, kOptSelectSwitches.def));
+	connect(sel, &QAction::triggered, this, [b](bool on) { b->setOption(kOptSelectSwitches.key, on); });
+
+	// 显示类选项单开一组：改的是画什么，不是手势做什么。两项都要 rebuild/refresh 才可见。
+	QMenu *disp = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Display")));
+	QAction *mru = disp->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.ShowMru")));
+	mru->setCheckable(true);
+	mru->setChecked(b->option(kOptShowMru.key, kOptShowMru.def));
+	connect(mru, &QAction::triggered, this, [this, b](bool on) {
+		b->setOption(kOptShowMru.key, on);
+		refreshMru();
+		// 条出现/消失会把整棵树推上下移，正读着的那一行会跑出可视区；
+		// 不保留占位（那是为一条已被用户关掉的功能永久扣住 24px），只把选中行带回视野。
+		if (view_->currentIndex().isValid())
+			view_->scrollTo(view_->currentIndex());
+	});
+	QAction *ico = disp->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SceneIcons")));
+	ico->setCheckable(true);
+	ico->setChecked(b->option(kOptIcons.key, kOptIcons.def));
+	connect(ico, &QAction::triggered, this, [this, b](bool on) {
+		b->setOption(kOptIcons.key, on);
+		rebuild();
+	});
 }

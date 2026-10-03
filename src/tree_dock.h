@@ -55,6 +55,9 @@ private:
 	QStandardItem *itemAtSourceIndex(const QModelIndex &proxyIdx) const; // proxy → source item
 	NodePath pathOfItem(const QStandardItem *it) const;
 	void refreshMru(); // store.mru() → mruBar_ 里的可点击 chips（只做主画布）
+	// 三个行为/显示开关那一组。空白区右键菜单与底部「⋯」按钮共用同一份构造——
+	// 开关只藏在一个入口里的话，不知道那个入口的人就永远看不到它们。
+	void buildSettingsMenu(QMenu &menu);
 	// chip 宽度按可用宽度均分，dock 被拖宽/拖窄后需要重算，否则要么留白要么冒出滚动条。
 	// 用宽度差阈值挡住抖动，也顺带杜绝 refreshMru → 建 chip → 再触发 resize 的回环。
 	void resizeEvent(QResizeEvent *e) override;
@@ -77,6 +80,7 @@ private:
 	AnchorModel *model_ = nullptr;
 	QSortFilterProxyModel *proxy_ = nullptr;
 	QToolButton *btnAddScene_ = nullptr, *btnAddFolder_ = nullptr, *btnRemove_ = nullptr;
+	QToolButton *btnSettings_ = nullptr;
 	bool rebuilding_ = false;
 	// J-7 改名缺口（K-2②）：itemChanged 里改名一个 Folder 后，紧接着触发的这次 rebuild() 要用
 	// "刚提交的新名字"去匹配选中恢复，而不是重新信任 it->text()（改名与嵌套重建之间的时序不保证
