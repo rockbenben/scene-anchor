@@ -107,7 +107,7 @@ O(n)，n ≤ 数百。单 canvas 时不显示 canvas 分组层。自发操作用
 | 交互 | 实现 |
 |---|---|
 | 双击 | 可配：转场（默认）/ 重命名 / 无。Studio 模式单击设预览 |
-| 搜索 | `QSortFilterProxyModel` + `setRecursiveFilteringEnabled(true)`；非空全展开，清空恢复 store 展开态 |
+| 搜索 | `QSortFilterProxyModel` + `setRecursiveFilteringEnabled(true)`；非空全展开，清空恢复 store 展开态。树下面有一行状态：搜不到东西时说「没有匹配 · 按 Esc 清空」（此前是一片空白，看起来像插件坏了），有结果时说「搜索中不能拖动整理」（禁拖是有意的，见下条，但界面上以前完全没交代）。判断有无结果走 `indexBelow` 的**可见顺序**，折叠文件夹里的命中项不算有结果 |
 | MRU | 监听 `SCENE_CHANGED` 头插去重，上限 5，树上方 chips，点击即切，不参与拖拽。**画几枚、每枚多宽由 dock 宽度算出**：先试「每一枚都放得下全名」的最大数量，试不出才退到「省略后至少还剩 48px」；再都不行就画一枚，剩下的进末尾的「⋯」菜单——挤掉的东西必须在界面上有出口，不能只留在日志那句 `dropped for width` 里。省略取 ElideMiddle：OBS 场景名普遍带类别前缀，从尾部截会让多个 chip 长得一模一样。**条高不随宽度变**：取不受宽度约束时的 chip 高度——被压窄的按钮 `sizeHint` 会变高，拿它定条高会让整棵树随 dock 宽度上下爬（量具实测 36 vs 24） |
 | 多选拖拽 | `ExtendedSelection`；drop 按序插入（修复旧插件 row 不递增 bug） |
 | 颜色 | 8 个预设 + 自定义（QColorDialog）+ 清除，folder/scene 通用。**呈现方式：给该行已有的图标染色**，不新增视觉元素；绘制前按**这一行的色真会落在的两块背景**（树底 `Base` 与选中高亮条 `Highlight`）把明度调到 WCAG 图形门槛 3:1（色相饱和度不动），故存的是用户原色、画的是可读版本。关掉图标后同一支色当**文字**用，按正文门槛 4.5:1 再解一次。菜单里当前色以描边环标示——带图标的 QAction 其勾选标记会被图标盖掉 |

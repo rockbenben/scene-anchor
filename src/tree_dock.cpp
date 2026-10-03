@@ -532,6 +532,17 @@ TreeDock::TreeDock()
 	hint_->setVisible(false); // 由 rebuild() 按文件夹数量决定
 	lay->addWidget(hint_);
 
+	// 过滤态的一句话状态。两件事此前在界面上完全没有交代：搜不到东西时树整块空掉
+	// （看起来像插件坏了），以及搜索中拖拽被禁（这是有意的，见 textChanged 里的注释，
+	// 但用户只觉得「拖不动」）。放在树下面而不是弹提示：它是状态，不是事件。
+	status_ = new QLabel(QString(), this);
+	status_->setWordWrap(true);
+	status_->setAlignment(Qt::AlignCenter);
+	status_->setForegroundRole(QPalette::PlaceholderText);
+	status_->setContentsMargins(10, 4, 10, 4);
+	status_->setVisible(false);
+	lay->addWidget(status_);
+
 	auto *btnRow = new QHBoxLayout();
 	btnRow->setContentsMargins(4, 0, 4, 4);
 	// 三个按钮此前是「文字 + / SVG 文件夹 / 文字 -」的混搭：两个字形与一个图标并排，
@@ -600,8 +611,10 @@ TreeDock::TreeDock()
 			// 三个 DnD 覆写因而不会被调用——具体由哪一层拦下未经源码确认（obs-deps 的 Qt 只有
 			// 头文件与库，无 .cpp），但对外可观察的保证一致。
 			view_->setDragDropMode(QAbstractItemView::NoDragDrop);
+			updateStatus();
 		} else {
 			view_->setDragDropMode(QAbstractItemView::InternalMove);
+			updateStatus();
 			rebuild(); // 恢复 store 记录的展开态——过滤期间 expandWrite 已抑制回写，store 未被
 				   // expandAll() 或过滤中的手动折叠污染，这里重建即是精确回到过滤前的样子
 		}
@@ -999,7 +1012,8 @@ void TreeDock::rebuild()
 	// 先决定提示的显隐再恢复滚动位置：反过来的话，显隐引发的重排会改变滚动条量程，
 	// 刚设好的值被夹掉，用户眼里就是"建完文件夹视图跳了一下"。
 	hintWanted_ = folderRows == 0;
-	updateHintCap(); // 由它统一决定可见性（宽/高不够时整段隐藏）
+	updateHintCap();
+	updateStatus(); // 过滤中的状态行要在重建之后重算（命中项可能被外部事件删掉了） // 由它统一决定可见性（宽/高不够时整段隐藏）
 	// 根层的展开箭头栏，只在**顶层确实有一个能展开的文件夹**时才占位。
 	//
 	// QTreeView 的缩进是 (层级 + rootIsDecorated) * indentation，是按**层**生效的：
@@ -1045,6 +1059,32 @@ void TreeDock::onSceneStateChanged()
 	}
 	rebuilding_ = wasRebuilding; // 恢复而非硬置 false：万一未来某处从 rebuild 内部调用本函数，不破坏外层的保护
 	refreshMru();
+}
+
+// 过滤态的一句话状态。
+void TreeDock::updateStatus()
+{
+	const bool filtering = !search_->text().isEmpty();
+	if (!filtering) {
+		status_->setVisible(false);
+		status_->setText(QString());
+		return;
+	}
+	// 走视图的可见顺序而不是自己递归模型：折叠起来的文件夹里的命中项屏幕上看不见，
+	// 把它算成「有结果」就会漏报无匹配（与搜索回车那处同一个理由）。
+	bool anyScene = false;
+	for (QModelIndex i = proxy_->index(0, 0, QModelIndex()); i.isValid(); i = view_->indexBelow(i))
+		if (i.data(RoleKind).toInt() == RowPlan::Scene) {
+			anyScene = true;
+			break;
+		}
+	// 无匹配是第三种状态，既不是「空库」也不是「有内容」：以前它长得像插件坏了。
+	// 两个键名分开写：check-locales.py 靠 grep 代码里的 obs_module_text 调用来核对引用，
+	// 把键塞进三元表达式的条件里会让它误判成"定义了但没用到"。
+	const QString text = anyScene ? QString::fromUtf8(obs_module_text("SceneAnchor.FilterNoDrag"))
+				      : QString::fromUtf8(obs_module_text("SceneAnchor.NoMatch"));
+	status_->setText(text);
+	status_->setVisible(true);
 }
 
 // 提示文字的限高：见构造里 updateHintCap() 调用处的说明。

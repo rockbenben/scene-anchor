@@ -62,6 +62,7 @@ private:
 	// 用宽度差阈值挡住抖动，也顺带杜绝 refreshMru → 建 chip → 再触发 resize 的回环。
 	void resizeEvent(QResizeEvent *e) override;
 	void updateHintCap();     // 空状态提示的限高随 dock 高度走，放不下则整段隐藏，见 .cpp
+	void updateStatus();      // 过滤态的一句话状态：无匹配 / 搜索中禁拖
 	bool hintWanted_ = false; // 树里没有文件夹 = 想显示提示；能不能真显示由 updateHintCap 定
 	int mruWidth_ = -1;
 	// fix round 1 Important：右键菜单的动作要到 QMenu::exec() 的嵌套事件循环里点击才执行，
@@ -73,6 +74,7 @@ private:
 	QModelIndex findFolderIndex(const QString &canvas, const NodePath &path) const;
 	QLineEdit *search_ = nullptr;
 	QLabel *hint_ = nullptr;           // 无文件夹时的空状态引导，建了第一个就自动隐藏
+	QLabel *status_ = nullptr;         // 见 updateStatus()
 	QWidget *mruBar_ = nullptr;        // chips 的宿主，装在 mruScroll_ 里
 	QScrollArea *mruScroll_ = nullptr; // 切断 chip 宽度对 dock 最小宽度的传导
 	QHBoxLayout *mruLayout_ = nullptr;
