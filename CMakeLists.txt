@@ -36,7 +36,7 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/module.cpp src/obs_bridge.cpp src/tree_dock.cpp src/tree_store.cpp src/projection.cpp
+  PRIVATE src/module.cpp src/obs_bridge.cpp src/tree_dock.cpp src/tree_store.cpp src/projection.cpp src/contrast.cpp
 )
 
 # OBS 32 插件清单（libobs/obs-module.c 的 obs_module_load_metadata 会读插件 data 目录下的

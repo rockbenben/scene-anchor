@@ -1,8 +1,10 @@
 // Copyright (C) 2026 rockbenben <rockbenben@users.noreply.github.com>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "../src/contrast.h"
 #include "../src/tree_store.h"
 #include "../src/projection.h"
+#include <cmath>
 #include <cstdio>
 
 static int failures = 0;
@@ -480,6 +482,50 @@ static void test_name_fallback()
 	}
 }
 
+// 标签色的可读性判据。测的是「落地成 8 位 RGB 之后」的比值——求解在浮点 HSL 上做，
+// 取整能把 4.50 变成 4.49，只有按最终像素判才不会放过这一档。
+static void test_contrast()
+{
+	const QColor baseDark("#272A33"), selDark("#284CB8");
+	const QColor baseLight("#E5E5E5"), selLight("#8CB5FF");
+	const QVector<QColor> darkBgs{baseDark, selDark};
+	const QVector<QColor> lightBgs{baseLight, selLight};
+
+	// 反向证人：不达标的那一支必须真的不达标，否则下面那几条是空转
+	CHECK(contrastOf(QColor("#d13438"), selDark) < kMinContrast);
+	CHECK(contrastOf(QColor("#d13438"), baseDark) < kMinTextContrast);
+
+	for (const char *hex :
+	     {"#d13438", "#ca5010", "#c19c00", "#107c10", "#038387", "#0078d4", "#8764b8", "#881798"}) {
+		const QColor raw(hex);
+		const QColor icon = readableOn(raw, darkBgs, kMinContrast);
+		CHECK(contrastOf(icon, baseDark) >= kMinContrast);
+		CHECK(contrastOf(icon, selDark) >= kMinContrast);
+		const QColor text = readableOn(raw, darkBgs, kMinTextContrast);
+		CHECK(contrastOf(text, baseDark) >= kMinTextContrast);
+		CHECK(contrastOf(text, selDark) >= kMinTextContrast);
+		const QColor li = readableOn(raw, lightBgs, kMinContrast);
+		CHECK(contrastOf(li, baseLight) >= kMinContrast);
+		CHECK(contrastOf(li, selLight) >= kMinContrast);
+	}
+
+	// 已经达标的原色必须一个像素都不动（标签色是用户数据，无必要不改）
+	const QColor pass("#ffffff");
+	CHECK(readableOn(pass, darkBgs, kMinTextContrast) == pass);
+
+	// 只许动明度：色相与饱和度是用户挑的那个颜色的身份
+	float h0 = 0, s0 = 0, l0 = 0, a0 = 1, h1 = 0, s1 = 0, l1 = 0, a1 = 1;
+	QColor("#c19c00").getHslF(&h0, &s0, &l0, &a0);
+	readableOn(QColor("#c19c00"), lightBgs, kMinContrast).getHslF(&h1, &s1, &l1, &a1);
+	CHECK(std::fabs(h0 - h1) < 0.01);
+	CHECK(std::fabs(s0 - s1) < 0.05);
+	CHECK(l1 < l0); // 浅背景上只能压暗
+
+	// 无彩色（Qt 的 hue 返回 -1）不能把求解器打崩
+	const QColor gray("#8a8a8a");
+	CHECK(readableOn(gray, darkBgs, kMinContrast).isValid());
+}
+
 int main()
 {
 	test_roundtrip();
@@ -492,6 +538,7 @@ int main()
 	test_edge_cases();
 	test_name_fallback();
 	test_projection();
+	test_contrast();
 	if (failures) {
 		std::printf("%d FAILURES\n", failures);
 		return 1;

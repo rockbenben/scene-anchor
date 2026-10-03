@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "tree_dock.h"
+#include "contrast.h"
 #include "obs_bridge.h"
 #include <QColor>
 #include <QColorDialog>
@@ -31,6 +32,7 @@
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
 #include <QToolButton>
+#include <QVector>
 #include <QVBoxLayout>
 #include <QWidgetAction>
 #include <algorithm>
@@ -109,9 +111,9 @@ static constexpr Opt kOptShowMru{"ShowMru", true};               // 显示最近
 // 树里的图标（文件夹与场景一起开关，不是只管场景——键名 SceneIcons 是历史包袱，
 // 不能改，改了已有用户的设置会丢）。默认开，取舍理由见 rebuild 里染色那一段。
 static constexpr Opt kOptIcons{"SceneIcons", true};
-// 预设色按"好看"挑（Fluent 那一组），不按"在所有背景上都够对比"挑——后者解出来的
-// 是一组被逼到 100% 饱和的刺眼色（#f80000 / #927900 / #da00da 之流）。可读性交给下面的
-// contrastAdjusted 在绘制时解决：存的是用户选的原色，画的是按当前背景调过明度的版本。
+// 预设色按"好看"挑（Fluent 那一组），不按"在所有背景上够对比"挑——后者解出来的是
+// 一组被逼到 100% 饱和的刺眼色（#f80000 / #927900 / #da00da 之流）。可读性交给
+// readableOn 在绘制时解决。
 struct Preset {
 	const char *hex;
 	const char *key; // locale 键后缀
@@ -129,61 +131,19 @@ static bool presetHas(const QString &hex)
 	return false;
 }
 
-// WCAG 2.1 SC 1.4.11：图形元素对背景至少 3:1。
-static constexpr double kMinContrast = 3.0;
-
-static double srgbLin(double c)
-{
-	return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
-}
-static double relLum(const QColor &c)
-{
-	return 0.2126 * srgbLin(c.redF()) + 0.7152 * srgbLin(c.greenF()) + 0.0722 * srgbLin(c.blueF());
-}
-static double contrastOf(double a, double b)
-{
-	return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
-}
-
-// 把标签色调到对 bg 达标，只动 HSL 明度、保住色相与饱和度。
-// 为什么不改成"一组深浅通吃的固定色"：那样的解存在但窗口极窄（真机实测深色背景
-// #272A33、浅色 #E5E5E5，可行亮度只有 L∈[0.17,0.23]），八个色相被压到同一亮度且必须
-// 满饱和，非常难看。而且标签色是**用户数据**，按主题换一套值会让同一个场景集合在不同
-// 主题下显示成不同颜色。改在绘制期适配，既保住存储值的唯一性，也顺带让用户自选的
-// 任意颜色（包括深色背景上的深蓝、浅色背景上的浅黄）自动可读。
-static QColor contrastAdjusted(const QColor &c, const QColor &bg)
-{
-	const double lb = relLum(bg);
-	if (contrastOf(relLum(c), lb) >= kMinContrast)
-		return c;
-	const bool lighten = lb < 0.18; // 0.18 ≈ 中灰亮度：背景比它暗就提亮标签，反之压暗
-	float h = 0, s = 0, l = 0, a = 1;
-	c.getHslF(&h, &s, &l, &a);
-	if (h < 0)
-		h = 0; // 无彩色时 Qt 返回 -1，fromHslF 不接受
-	double lo = lighten ? l : 0.0, hi = lighten ? 1.0 : l;
-	for (int i = 0; i < 24; ++i) {
-		const double mid = (lo + hi) / 2;
-		const bool ok = contrastOf(relLum(QColor::fromHslF(h, s, float(mid), a)), lb) >= kMinContrast;
-		if (lighten)
-			(ok ? hi : lo) = mid;
-		else
-			(ok ? lo : hi) = mid;
-	}
-	return QColor::fromHslF(h, s, float(lighten ? hi : lo), a);
-}
+// 对比度求解（readableOn / 两个门槛）在 src/contrast.{h,cpp} —— 那里能被不链 libobs 的单元测试直接调用。
 
 // 颜色菜单的色块。当前所选那一格加一圈高对比描边——**不能靠 QAction 的勾选标记**：
 // 带图标的 QAction，勾与图标抢同一列，在 OBS 的样式表下勾会被图标盖掉，结果就是
 // "当前色没打勾"（用户实测报告）。同子菜单里「最近使用」「图标」能看到勾，
 // 正因为它们没有图标。描边不依赖样式表行为，深浅主题都成立。
-static QPixmap colorSwatch(const QColor &raw, const QColor &bg, const QColor &fg, bool current)
+static QPixmap colorSwatch(const QColor &raw, const QVector<QColor> &bgs, const QColor &fg, bool current)
 {
 	QPixmap px(16, 16);
 	px.fill(Qt::transparent);
 	QPainter p(&px);
 	p.setRenderHint(QPainter::Antialiasing, false);
-	p.fillRect(QRect(1, 1, 14, 14), contrastAdjusted(raw, bg));
+	p.fillRect(QRect(1, 1, 14, 14), readableOn(raw, bgs, kMinContrast));
 	if (current) {
 		p.setPen(QPen(fg, 2));
 		p.drawRect(QRect(1, 1, 13, 13));
@@ -830,6 +790,9 @@ void TreeDock::rebuild()
 	// fix round 3：深浅色的判定改问 view_ 的实际调色板而非 obs_frontend_is_theme_dark()
 	// （原因见 anchorIcon 上方注释），行图标与工具栏按钮图标共用这同一次判定结果。
 	const QColor viewBg = view_->palette().color(QPalette::Base);
+	// 一行上的色会落在两种背景上：普通行的树底，和选中行的高亮条。图标是重建时烘死
+	// 的，之后选不选中它不知道，所以求解时两块都要满足（见 readableOn）。
+	const QColor selBg = view_->palette().color(QPalette::Highlight);
 	const bool darkIcons = viewBg.lightness() < 128;
 	const QIcon folderIcon = anchorFolderIcon(darkIcons);
 	const QIcon sceneIcon = anchorSceneIcon(darkIcons);
@@ -907,9 +870,12 @@ void TreeDock::rebuild()
 		item->setFlags(f);
 		// 画布表头此前与场景行同字重同色，看着像可点的树项，实际不可选。用调色板的
 		// 颜色标签 = 给这一行已有的图标染色（见 tintedIcon 上方的三轮取舍记录）。
-		// 上色前先按实际背景调对比度：存的是原色，画的是可读的那一版。
+		// 上色前先按实际背景调对比度：存的是原色，画的是可读的那一版。图标按图形门槛，
+		// 关掉图标后同一支色是**文字**，要按正文门槛再解一次（门槛不同，见 kMinTextContrast）。
 		const QColor raw(r.color);
-		const QColor tag = raw.isValid() ? contrastAdjusted(raw, viewBg) : QColor();
+		const QVector<QColor> rowBgs{viewBg, selBg};
+		const QColor tag = raw.isValid() ? readableOn(raw, rowBgs, kMinContrast) : QColor();
+		const QColor tagText = raw.isValid() ? readableOn(raw, rowBgs, kMinTextContrast) : QColor();
 		// 图标开关必须**同时**管文件夹与场景，不能只管场景。QTreeView 的缩进是
 		// (层级 + 根装饰) * indentation，补不回图标那一栏的宽度：只关场景图标的话，
 		// 顶层场景名与顶层文件夹名会差出整整一个图标宽（真机实测 41 / 74），而文件夹
@@ -922,8 +888,11 @@ void TreeDock::rebuild()
 		if (icons) {
 			const QIcon &base = r.kind == RowPlan::Folder ? folderIcon : sceneIcon;
 			item->setIcon(tag.isValid() ? tintedIcon(base, tag) : base);
-		} else if (tag.isValid()) {
-			item->setForeground(tag); // 没有图标可染，颜色标签落到文字上
+		} else if (tagText.isValid()) {
+			// 没有图标可染，颜色标签落到文字上。注意：这一行被选中时，样式会用
+			// HighlightedText 覆盖逐行的前景色，标签色在选中那一瞬间不显示——
+			// 要保住它得把 delegate 请回来，§6b 记着那条路为什么被放弃。
+			item->setForeground(tagText);
 		}
 		parents[r.depth]->appendRow(item);
 		parents.resize(r.depth + 1);
@@ -1172,25 +1141,27 @@ void TreeDock::onContextMenu(const QPoint &pos)
 			});
 		};
 		// 菜单项此前直接显示十六进制码（"#d13438"），对用户毫无意义；改用颜色名。
-		// 色块也过一遍 contrastAdjusted，让菜单里看到的就是行上会画出来的那个色。
-		const QColor menuBg = view_->palette().color(QPalette::Base);
-		const QColor menuFg = view_->palette().color(QPalette::Text);
+		// 色块也过一遍 readableOn，让菜单里看到的就是行上会画出来的那个色：
+		// 背景取菜单自己的 Window 加上鼠标划过时那一格的 Highlight，两块都要读得出。
+		const QVector<QColor> menuBgs{menu.palette().color(QPalette::Window),
+					      menu.palette().color(QPalette::Highlight)};
+		const QColor menuFg = menu.palette().color(QPalette::Text);
 		const QString cur = target->data(RoleColor).toString();
 		for (const Preset &pc : kColors) {
 			QAction *a = cm->addAction(
 				QString::fromUtf8(obs_module_text(QByteArray("SceneAnchor.Color.") + pc.key)));
 			const bool isCur = cur.compare(QString::fromUtf8(pc.hex), Qt::CaseInsensitive) == 0;
-			a->setIcon(QIcon(colorSwatch(QColor(QString::fromUtf8(pc.hex)), menuBg, menuFg, isCur)));
+			a->setIcon(QIcon(colorSwatch(QColor(QString::fromUtf8(pc.hex)), menuBgs, menuFg, isCur)));
 			const QByteArray hex(pc.hex);
 			connect(a, &QAction::triggered, this, [apply, hex] { apply(QString::fromUtf8(hex)); });
 		}
 		cm->addSeparator();
 		// 自定义配色：store 里的 color 本来就是任意字符串、渲染走 QColor(QString)，
-		// 所以这条只是补一个入口，没有新的存储或渲染路径。选出来的颜色同样经
-		// contrastAdjusted 保证可读，用户不会因为挑了个深蓝就得到一个看不见的标签。
+		// 所以这条只是补一个入口，没有新的存储或渲染路径。选出来的颜色同样过
+		// readableOn，用户不会因为挑了个深蓝就得到一个看不见的标签。
 		QAction *custom = cm->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.CustomColor")));
 		if (QColor(cur).isValid() && !presetHas(cur))
-			custom->setIcon(QIcon(colorSwatch(QColor(cur), menuBg, menuFg, true)));
+			custom->setIcon(QIcon(colorSwatch(QColor(cur), menuBgs, menuFg, true)));
 		connect(custom, &QAction::triggered, this, [this, apply, cur] {
 			const QColor init = QColor(cur).isValid() ? QColor(cur) : QColor(Qt::white);
 			const QColor picked = QColorDialog::getColor(

@@ -2,14 +2,16 @@ cmake_minimum_required(VERSION 3.22)
 project(scene-anchor-tests CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 add_executable(
   test_tree_store
   test_tree_store.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/tree_store.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/projection.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.cpp
 )
-target_link_libraries(test_tree_store PRIVATE Qt6::Core)
+# QColor 属于 Gui；仍然不链 Widgets、不链 libobs，所以这个测试在任何装了 Qt 的机器上都能跑
+target_link_libraries(test_tree_store PRIVATE Qt6::Core Qt6::Gui)
 
 # UI 量具：测各部件最小宽度，不是回归测试，不进 ctest
 add_executable(ux_probe EXCLUDE_FROM_ALL ux_probe.cpp)
@@ -28,6 +30,8 @@ add_executable(
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/obs_bridge.h
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/tree_store.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/projection.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.h
 )
 target_include_directories(
   dock_render
