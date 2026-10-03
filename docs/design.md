@@ -198,6 +198,27 @@ obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / m
   永远跟着仓库名，可以省掉这次自我介绍。标题里放 Search 与 Colors 而不是「存在集合内」，
   是因为列表里读者比的是功能面，那个差异点要点进去才体会得到。
 
+### 首屏图：真 OBS 截的，不是量具渲染的
+
+`docs/images/hero-*.webp` 是浮窗 dock 的客户区实拍（1200×554 = 800×369 逻辑 @150% 缩放）。
+量具能渲染出同样的像素，但它不是「有人真的在用」的证据，所以这张图必须来自真进程。重拍一次要跨的坑：
+
+- **隔离配置用 `--portable`，但 portable 的配置根是相对工作目录的**（`../../config`）。
+  所以工作目录要摆成 `<scratch>/bin/64bit`，并给 `<scratch>/data` 建一个指向安装目录的 junction，
+  否则报 "Failed to find local data files"。
+- **`<scratch>/obs-plugins/64bit` 反过来要自己建、只放需要的 DLL**。它同样按工作目录解析，
+  于是可以只留 `rtmp-services.dll`（少了它起不来：service 与编码器都在插件里）。
+  用户装的那些会弹窗的第三方插件因此不会被加载，也不用动 Program Files。
+- 插件本体走 `OBS_PLUGINS_PATH` + `OBS_PLUGINS_DATA_PATH` 指向 `build_x64/rundir/RelWithDebInfo`
+  （两者同一个目录：OBS 自己往数据路径后拼 `/%module%`）。portable 模式会跳过
+  `%PROGRAMDATA%\obs-studio\plugins` 那条搜索路径，正好避开上一次装的旧版。
+- **界面语言是 `user.ini` 的 `[General] Language`**，不是 `global.ini` 的 `Locale`——后者写了不生效。
+  图标开关（`SceneIcons`）和停靠布局同样在 `user.ini` 里，改完要等 OBS 正常退出（强杀会写出
+  崩溃哨兵，下次启动弹安全模式，而安全模式会禁用第三方插件，也就是我们自己）。
+- **点按钮先用 UIA 拿矩形，再发一次真实点击**。对着缩放后的截图目测坐标会偏一两行；
+  Qt 的 dock 浮动按钮在 UIA 里就叫 `Float`，浮起来之后 `MoveWindow` 按客户区尺寸调，
+  `PrintWindow` 连被遮挡的部分也能拍全。
+
 ### 许可证：GPL-2.0-or-later 是义务，不是偏好
 
 `libobs` 的头文件写的是 GPL **v2 or later**，且 obs-studio 全仓库没有任何链接例外
