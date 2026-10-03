@@ -107,7 +107,11 @@ print("   （问题汇总见末尾）")
 
 # ── 3. 未翻译残留：与英文完全相同的值 ────────────────────────────────────
 print("\n── 3. 与英文逐字相同的值（可能漏译；专有名词可豁免） ──")
-EXEMPT = {"SceneAnchor.DockTitle", "SceneAnchor.Color.Teal"}
+# 与英文逐字相同但确实正确的专有写法才进这张表。
+# Color.Teal 曾经在这里：那时各语言都直接写 "Teal"。现在 12 份全都译了
+# （Türkis / ティール / 청록 / Бирюзовый / Azul-petróleo / Sarcelle），
+# 留着它等于给以后真的漏译 Teal 开了个免检口子。
+EXEMPT = {"SceneAnchor.DockTitle"}
 for p in files:
     lang = os.path.basename(p)[:-4]
     if lang == "en-US":
