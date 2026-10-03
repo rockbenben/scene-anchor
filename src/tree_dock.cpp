@@ -851,6 +851,10 @@ void TreeDock::rebuild()
 	const auto plan = planProjection(b->store, live);
 
 	model_->removeRows(0, model_->rowCount());
+	// 行高钉成「图标高与字体高的较大值 + 1」，与图标开不开无关。不钉的话关掉图标
+	// 行高从 18 掉到 15（量具实测），一个纯显示开关把整棵树重排一遍，正读着的行会跳位。
+	// 不用样式表写死像素：OBS 的 Appearance/FontScale 会变，这里跟着字体走。
+	const int rowH = qMax(view_->iconSize().height(), QFontMetrics(view_->font()).height()) + 2;
 	std::vector<QStandardItem *> parents{model_->invisibleRootItem()};
 	std::vector<std::pair<QStandardItem *, bool>> expandStates;
 	int folderRows = 0, sceneRows = 0, unfiledRows = 0;
@@ -875,6 +879,7 @@ void TreeDock::rebuild()
 		else
 			f = Qt::ItemIsEnabled | Qt::ItemIsDropEnabled; // header：不可选，不可编辑
 		item->setFlags(f);
+		item->setSizeHint(QSize(0, rowH));
 		// 画布表头此前与场景行同字重同色，看着像可点的树项，实际不可选。用调色板的
 		// 颜色标签 = 给这一行已有的图标染色（见 tintedIcon 上方的三轮取舍记录）。
 		// 上色前先按实际背景调对比度：存的是原色，画的是可读的那一版。图标按图形门槛，
