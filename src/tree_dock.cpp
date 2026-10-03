@@ -1429,8 +1429,14 @@ void TreeDock::onContextMenu(const QPoint &pos)
 			const qreal dpr = sc->devicePixelRatio();
 			const QSize px(int(sc->geometry().width() * dpr + 0.5),
 				       int(sc->geometry().height() * dpr + 0.5));
+			// 整串走 locale：冒号全/半角、括号与空格各语言习惯不同（OBS 自己的
+			// Projector.Display 也是本地化的），硬编码会把中文的「：」塞进法语串里。
 			QAction *a = fsProj->addAction(
-				QStringLiteral("%1: %2 (%3x%4)").arg(i + 1).arg(label).arg(px.width()).arg(px.height()));
+				QString::fromUtf8(obs_module_text("SceneAnchor.Menu.ProjectorDisplay"))
+					.arg(i + 1)
+					.arg(label)
+					.arg(px.width())
+					.arg(px.height()));
 			connect(a, &QAction::triggered, this, [srcName, i] {
 				obs_frontend_open_projector("Scene", i, nullptr, srcName.toUtf8().constData());
 			});
@@ -1478,7 +1484,7 @@ void TreeDock::onContextMenu(const QPoint &pos)
 			auto *spin = new QSpinBox(tm);
 			spin->setRange(50, 20000);
 			spin->setSingleStep(50);
-			spin->setSuffix(QStringLiteral(" ms"));
+			spin->setSuffix(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.DurationSuffix")));
 			spin->setValue((int)obs_data_get_int(priv, "transition_duration"));
 			connect(spin, &QSpinBox::valueChanged, this, [uuid](int v) {
 				obs_source_t *s = obs_get_source_by_uuid(uuid.toUtf8().constData());
@@ -1611,6 +1617,9 @@ void TreeDock::buildSettingsMenu(QMenu &menu)
 	QAction *sel = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SelectSwitches")));
 	sel->setCheckable(true);
 	sel->setChecked(b->option(kOptSelectSwitches.key, kOptSelectSwitches.def));
+	// 这项开着时方向键每过一行就真切一次直播画面——行为是有意的（对齐原生列表），
+	// 但界面上此前没有任何地方说过，用户只会在切错之后才发现。
+	sel->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SelectSwitchesTip")));
 	connect(sel, &QAction::triggered, this, [b](bool on) { b->setOption(kOptSelectSwitches.key, on); });
 
 	// 显示类选项单开一组：改的是画什么，不是手势做什么。两项都要 rebuild/refresh 才可见。
