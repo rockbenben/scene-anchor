@@ -37,6 +37,7 @@
 #include <QWidgetAction>
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 #include <climits>
 #include <obs-frontend-api.h>
 #include <obs-module.h>
@@ -97,6 +98,12 @@ static constexpr int kMruChipMax = 150;
 // 塞下 4 个，每个只剩「自…屏」「sc…像头」这种两头各两字的残段，等于没有。
 // 88 起步换来每行少一两个 chip，但每个都认得出。MRU 的价值本来也集中在最前面一两个。
 static constexpr int kMruChipMin = 88;
+// 省略之后**至少还要剩多少像素的名字**才算认得出。48px ≈ 10pt 下四个汉字或八个拉丁字母；
+// 量具实测 dock 200 宽时第二枚 chip 是「scr…摄像头」——两头各截一点，中间一个省略号，
+// 认不出是哪个场景，白占一格。宁可少画一枚，也不摆一枚读不出的。
+static constexpr int kMruChipMinText = 48;
+// 「⋯」溢出按钮的宽度（含间距），放不下的最近场景从这里进菜单。
+static constexpr int kMruOverflowWidth = 26;
 
 // 三个布尔选项的配置键，存在 OBS 用户配置的 [SceneAnchor] 段，与 DoubleClick 同处。
 // 默认全为 true，即加入选项之前的既有行为。
@@ -1050,19 +1057,70 @@ void TreeDock::refreshMru()
 	for (const QString &u : mru)
 		if (names.count(u))
 			++live_;
-	const int avail = mruScroll_->viewport()->width() - 8;
-	// 先算这个宽度下按可读下限最多能放几个，再让它们均分——顺序不能反。先均分再看放不放得下
-	// 的话，窄 dock 上五个 chip 会各自缩到 40px 出头（真机 217 逻辑像素宽时实测缩到只剩
-	// "自习室…" "YY开…" 这种四字残段）并顶出一条横向滚动条：既读不出是哪个场景，又白吃
-	// 12px 纵向。少显示几个、每个都读得全，比五个都读不全有用。
+	// 用 dock 自己的宽度算，不用滚动区的 viewport 宽度：refreshMru 是从 resizeEvent 里
+	// 调的，那一刻 viewport 还停在上一轮的几何上（量具实测：dock 200 时 viewport 报 100），
+	// 拿它当可用宽度会把「放得下」判成放不下，整条被藏掉。
+	const int avail = qMax(60, width() - 8);
+	// 先定「画几枚」，再让它们均分宽度——顺序不能反。先均分再看放不放得下的话，窄 dock 上
+	// 五枚 chip 会各自缩到 40px 出头（真机 217 逻辑像素宽时实测缩到只剩 "自习室…" "YY开…"
+	// 这种四字残段）并顶出一条横向滚动条：既读不出是哪个场景，又白吃 12px 纵向。
+	// 从多到少试，取第一个「每枚省略后都还认得出」的数量；画不下的进「⋯」。
 	const int maxFit = std::max(1, (avail + 2) / (kMruChipMin + 2));
-	const int show = std::min(live_, maxFit);
-	int cap = kMruChipMax;
-	if (show > 0)
-		cap = std::clamp((avail - 2 * (show - 1)) / show, kMruChipMin, kMruChipMax);
+	QFontMetrics fm(mruBar_->font());
+	// 两轮策略，先严后宽：第一轮只接受「每一枚都放得下全名」的数量，第二轮才允许省略到
+	// 还剩 kMruChipMinText 像素。少了第一轮，会出现 297 宽画两枚全名、320 宽反而画三枚
+	// 省略名这种「越宽越难读」的倒挂（量具实测过）。
+	auto pick = [&](bool strict) {
+		for (int n = std::min(live_, maxFit); n >= 1; --n) {
+			const bool needsMore = n < live_;
+			const int items = n + (needsMore ? 1 : 0); // n 枚 chip，外加挤不下时的 ⋯
+			const int chrome = 2 * (items - 1) + 8 + (needsMore ? kMruOverflowWidth : 0);
+			const int w = std::clamp((avail - chrome) / n, kMruChipMin, kMruChipMax);
+			// 夹到下限之后可能反而放不下（两枚 88 + ⋯ 就超出 200 宽的 dock）。
+			// 放不下就少画一枚，而不是让这一条常驻一条横向滚动条。
+			if (n * w + chrome > avail)
+				continue;
+			bool ok = true;
+			int seen = 0;
+			for (const QString &u : mru) {
+				auto it = names.find(u);
+				if (it == names.end())
+					continue;
+				if (++seen > n)
+					break;
+				const int full = fm.horizontalAdvance(it->second);
+				ok = strict ? full <= w - 16
+					    : fm.horizontalAdvance(fm.elidedText(it->second, Qt::ElideMiddle,
+										 w - 16)) >= kMruChipMinText;
+				if (!ok)
+					break;
+			}
+			if (ok)
+				return qMakePair(n, w);
+		}
+		return qMakePair(0, kMruChipMax);
+	};
+	int show = 0, cap = kMruChipMax;
+	std::tie(show, cap) = pick(true);
+	if (show == 0)
+		std::tie(show, cap) = pick(false);
+	// 连一枚下限宽的 chip 都塞不进（极窄 dock）时不要整条藏掉：画一枚能画多宽画多宽，
+	// 剩下的进「⋯」。藏起来等于告诉用户「这个功能没了」，而这里只是暂时挤不下。
+	if (show == 0 && live_ > 0) {
+		show = 1;
+		cap = qMax(40, avail - (live_ > 1 ? kMruOverflowWidth + 10 : 8));
+	}
 
 	int inserted = 0;
+	// 条高取**不受宽度约束时**的 chip 高度，一次量好。被压窄的按钮 sizeHint 会变高
+	// （量具实测窄 dock 上 36、宽 dock 上 24），拿它定条高就等于让条高跟着 dock 宽度跳——
+	// 拖一下 dock，整棵树上下爬 12px。
 	int chipH = 0;
+	{
+		QToolButton probe(mruBar_);
+		probe.setAutoRaise(true);
+		chipH = probe.sizeHint().height();
+	}
 	for (const QString &u : mru) {
 		auto it = names.find(u);
 		if (it == names.end())
@@ -1071,17 +1129,44 @@ void TreeDock::refreshMru()
 			break; // 放不下的不画，而不是画出来再挤扁
 		auto *chip = new QToolButton(mruBar_);
 		chip->setAutoRaise(true);
-		// 场景名可以很长（真机上单个 chip 自然宽度达 231px）。封顶 + 省略，全名进 tooltip。
+		// 场景名可以很长（真机上单个 chip 自然宽度达 231px）。定宽 + 省略，全名进 tooltip。
 		// 省略位置取中间而非结尾：OBS 里的场景名普遍按类别加前缀（真机上就有
-		// 「YY开播-去背景|加底图」与「YY开播-小头像」），从尾部截会把两个 chip 都截成
+		// 「YY开播-去背景|加底图」与「YY开播-小头像」），从尾部截会把两枚都截成
 		// 「YY开播-…」——两个按钮长得一模一样，等于没有。从中间截保住首尾，
 		// 「YY开…加底图」与「YY开…小头像」仍可区分。
-		chip->setMaximumWidth(cap);
-		chip->setText(QFontMetrics(chip->font()).elidedText(it->second, Qt::ElideMiddle, cap - 16));
+		// 定宽而不是设上限：上限只封顶不收底，短名字那几枚各自缩成自己的宽度，
+		// 一排 chip 就排出参差的右边（量具实测同一档 dock 里 108 / 106 / 87 / 69）。
+		chip->setFixedWidth(cap);
+		chip->setText(fm.elidedText(it->second, Qt::ElideMiddle, cap - 16));
 		chip->setToolTip(it->second);
 		connect(chip, &QToolButton::clicked, this, [u] { ObsBridge::get()->switchToScene(u); });
-		chipH = std::max(chipH, chip->sizeHint().height());
+		chip->setFixedHeight(chipH);
 		mruLayout_->insertWidget(inserted++, chip);
+	}
+	// 有最近场景被宽度挤掉时，给一个「⋯」把它们列全。不这么做，「放不下的」在界面上
+	// 毫无交代（日志里那句 dropped for width 只有开发者看得到），而 MRU 的价值恰恰
+	// 集中在最前面几个之外的中段。
+	if (inserted > 0 && inserted < live_) {
+		auto *more = new QToolButton(mruBar_);
+		more->setAutoRaise(true);
+		more->setText(QStringLiteral("⋯"));
+		more->setFixedWidth(kMruOverflowWidth - 2);
+		more->setFixedHeight(chipH);
+		more->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.ShowMru")));
+		auto *menu = new QMenu(more);
+		int seen = 0;
+		for (const QString &u : mru) {
+			auto it = names.find(u);
+			if (it == names.end())
+				continue;
+			if (++seen > inserted)
+				continue; // 条上已经有的不再重复列
+			const QString uuid = u, label = it->second;
+			connect(menu->addAction(label), &QAction::triggered, this,
+				[uuid] { ObsBridge::get()->switchToScene(uuid); });
+		}
+		more->setMenu(menu);
+		mruLayout_->insertWidget(inserted++, more);
 	}
 	mruScroll_->setVisible(inserted > 0);
 	if (inserted > 0) {
@@ -1091,8 +1176,12 @@ void TreeDock::refreshMru()
 		// chip 是本函数刚创建的，它的 sizeHint 与布局激活时机无关。
 		// show 只保证"按下限放得下"；dock 窄到连一个下限宽 chip 都放不下时滚动条仍会出现，
 		// 那时要额外留出它的高度，否则又被裁掉。
-		const int need = inserted * cap + 2 * (inserted - 1) + 8;
-		const int sb = need > avail ? mruScroll_->horizontalScrollBar()->sizeHint().height() : 0;
+		// 条高 = chip 高 +（真的溢出时）横向滚动条高。溢出与否**问 Qt 要实测**，
+		// 不靠自己把 margin/spacing/按钮边框一项项加回去——那样算永远差几个像素，
+		// 而差错的后果是滚动条出现了却没给它留高度，chip 又被裁掉一截。
+		mruLayout_->activate();
+		const bool overflows = mruBar_->sizeHint().width() > mruScroll_->viewport()->width();
+		const int sb = overflows ? mruScroll_->horizontalScrollBar()->sizeHint().height() : 0;
 		mruScroll_->setFixedHeight(chipH + sb);
 	}
 	// 两个原因都会让 chip 少于 mru 条数，分开报：陈旧条目是数据问题，宽度不足是布局问题，
@@ -1391,6 +1480,10 @@ void TreeDock::onContextMenu(const QPoint &pos)
 		connect(mru, &QAction::triggered, this, [this, b](bool on) {
 			b->setOption(kOptShowMru.key, on);
 			refreshMru();
+			// 条出现/消失会把整棵树推上下移，正读着的那一行会跑出可视区；
+			// 不保留占位（那是为一条已被用户关掉的功能永久扣住 24px），只把选中行带回视野。
+			if (view_->currentIndex().isValid())
+				view_->scrollTo(view_->currentIndex());
 		});
 		QAction *ico = disp->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SceneIcons")));
 		ico->setCheckable(true);
