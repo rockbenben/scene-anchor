@@ -546,7 +546,7 @@ TreeDock::TreeDock()
 	btnRemove_ = new QToolButton(this);
 	btnRemove_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Remove")));
 	btnSettings_ = new QToolButton(this);
-	btnSettings_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Display")));
+	btnSettings_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Settings")));
 	btnSettings_->setPopupMode(QToolButton::InstantPopup);
 	// 「造」的两枚与「毁」的一枚之间加一条分隔：此前三个 25×25 的按钮同权重并排，
 	// 而其中一枚点下去对文件夹是静默解散结构、对场景是弹确认框——后果最重的那个
@@ -1314,7 +1314,11 @@ void TreeDock::onContextMenu(const QPoint &pos)
 		menu.addSeparator();
 		// fix round 1 Important：改名按 uuid 在点击时重新定位行（见 findSceneIndex 注释），
 		// 不捕获 pi——exec() 期间树可能已被外部事件重建，pi 会失效。
-		QAction *ren = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Rename")));
+		// 键盘手势此前在界面上零可见性：F2 改名实现了但没有任何地方说。用 \t 把键位
+		// 排到菜单右侧那一列——**只显字不注册** QAction 快捷键：注册会抢 OBS 的全局键
+		// （F2 现在是树的内建编辑触发，Esc 是只吃搜索框焦点的 WidgetShortcut）。
+		QAction *ren = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Rename")) +
+					      QStringLiteral("\tF2"));
 		connect(ren, &QAction::triggered, this, [this, uuid] {
 			const QModelIndex idx = findSceneIndex(uuid);
 			if (idx.isValid())
@@ -1323,6 +1327,9 @@ void TreeDock::onContextMenu(const QPoint &pos)
 		QAction *dup = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Duplicate")));
 		connect(dup, &QAction::triggered, this, [b, uuid] { b->duplicateScene(uuid); });
 		QAction *rm = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.RemoveScene")));
+		// 这是全 dock 最危险的一项，而确认框只问「确定删除吗」。后果与可逆性放在
+		// tooltip 上说（不打断、第一次读、之后不再挡路），确认框本身保持一句短问句。
+		rm->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.RemoveSceneTip")));
 		// 确认框文案用的场景名在菜单构建时取值捕获（sceneName），不捕获 it 本身——同上理由。
 		const QString sceneName = it->text();
 		connect(rm, &QAction::triggered, this, [this, b, uuid, sceneName] {
@@ -1334,12 +1341,17 @@ void TreeDock::onContextMenu(const QPoint &pos)
 		});
 		menu.addSeparator();
 
-		QAction *cf = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.CopyFilters")));
+		// 滤镜三项收进子菜单：其中「滤镜」其实是打开 OBS 的滤镜窗口，平铺在复制/粘贴
+		// 旁边读起来像第三种滤镜操作；收起来还让主菜单短两行（这层菜单此前比 dock 高）。
+		QMenu *fm = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Filters")));
+		QAction *cf = fm->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.CopyFilters")));
 		connect(cf, &QAction::triggered, this, [b, uuid] { b->copyFilters(uuid); });
-		QAction *pf = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.PasteFilters")));
+		QAction *pf = fm->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.PasteFilters")));
 		pf->setEnabled(b->hasCopiedFilters());
+		// 灰掉的主键必须自己说为什么灰着，否则用户只会反复点它。
+		pf->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.PasteFiltersTip")));
 		connect(pf, &QAction::triggered, this, [b, uuid] { b->pasteFilters(uuid); });
-		QAction *flt = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Filters")));
+		QAction *flt = fm->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.OpenFilters")));
 		connect(flt, &QAction::triggered, this, [uuid] {
 			obs_source_t *s = obs_get_source_by_uuid(uuid.toUtf8().constData());
 			if (s) {
@@ -1347,6 +1359,42 @@ void TreeDock::onContextMenu(const QPoint &pos)
 				obs_source_release(s);
 			}
 		});
+		menu.addSeparator();
+
+		// 画面：投影（窗口 + 各显示器）与截屏。两个投影项合成一个子菜单，主菜单再少一行。
+		// 投影按名字开，不区分主/副画布（obs_frontend_open_projector 只按名字找，无画布语义）
+		obs_source_t *src = obs_get_source_by_uuid(uuid.toUtf8().constData());
+		const QString srcName = src ? QString::fromUtf8(obs_source_get_name(src)) : QString();
+		if (src)
+			obs_source_release(src);
+		QMenu *pm = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Projector")));
+		QAction *winProj =
+			pm->addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.WindowProjector")));
+		connect(winProj, &QAction::triggered, this,
+			[srcName] { obs_frontend_open_projector("Scene", -1, nullptr, srcName.toUtf8().constData()); });
+		QMenu *fsProj = pm->addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.FullscreenProjector")));
+		const auto screens = QGuiApplication::screens();
+		for (int i = 0; i < screens.size(); ++i) {
+			QScreen *sc = screens[i];
+			// 名字缺失时兜底成「显示器 2」，而不是留出一个连着两个空格的空洞。
+			const QString label =
+				sc->name().isEmpty()
+					? QStringLiteral("%1 %2").arg(
+						  QString::fromUtf8(obs_module_text("SceneAnchor.Menu.DisplayN")),
+						  QString::number(i + 1))
+					: sc->name();
+			// 报物理分辨率：geometry() 给的是逻辑像素，150% 缩放下 2560×1440 的屏
+			// 会写成 1707x960（量具实测），用户拿自己那块屏的分辨率来找永远找不到。
+			// pin 的 Qt 6.8 还没有 QScreen::physicalGeometry()，按 devicePixelRatio 换算。
+			const qreal dpr = sc->devicePixelRatio();
+			const QSize px(int(sc->geometry().width() * dpr + 0.5),
+				       int(sc->geometry().height() * dpr + 0.5));
+			QAction *a = fsProj->addAction(
+				QStringLiteral("%1: %2 (%3x%4)").arg(i + 1).arg(label).arg(px.width()).arg(px.height()));
+			connect(a, &QAction::triggered, this, [srcName, i] {
+				obs_frontend_open_projector("Scene", i, nullptr, srcName.toUtf8().constData());
+			});
+		}
 		QAction *shot = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Screenshot")));
 		connect(shot, &QAction::triggered, this, [uuid] {
 			obs_source_t *s = obs_get_source_by_uuid(uuid.toUtf8().constData());
@@ -1355,31 +1403,6 @@ void TreeDock::onContextMenu(const QPoint &pos)
 				obs_source_release(s);
 			}
 		});
-		menu.addSeparator();
-
-		// 投影：按名字开，不区分主/副画布（obs_frontend_open_projector 只按名字找，无画布语义）
-		obs_source_t *src = obs_get_source_by_uuid(uuid.toUtf8().constData());
-		const QString srcName = src ? QString::fromUtf8(obs_source_get_name(src)) : QString();
-		if (src)
-			obs_source_release(src);
-		QAction *winProj =
-			menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.WindowProjector")));
-		connect(winProj, &QAction::triggered, this,
-			[srcName] { obs_frontend_open_projector("Scene", -1, nullptr, srcName.toUtf8().constData()); });
-		QMenu *fsProj =
-			menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.FullscreenProjector")));
-		const auto screens = QGuiApplication::screens();
-		for (int i = 0; i < screens.size(); ++i) {
-			QScreen *sc = screens[i];
-			QAction *a = fsProj->addAction(QStringLiteral("%1: %2 %3x%4")
-							       .arg(i + 1)
-							       .arg(sc->name())
-							       .arg(sc->geometry().width())
-							       .arg(sc->geometry().height()));
-			connect(a, &QAction::triggered, this, [srcName, i] {
-				obs_frontend_open_projector("Scene", i, nullptr, srcName.toUtf8().constData());
-			});
-		}
 		menu.addSeparator();
 
 		{
@@ -1427,7 +1450,17 @@ void TreeDock::onContextMenu(const QPoint &pos)
 				obs_source_release(s);
 			});
 			auto *wa = new QWidgetAction(tm);
-			wa->setDefaultWidget(spin);
+			// 裸数字框没人知道它是干什么的（实测这一项的文本是空串）。
+			// 包一层「标签 + 框」，标签走 locale。
+			auto *durRow = new QWidget(tm);
+			auto *dl = new QHBoxLayout(durRow);
+			dl->setContentsMargins(8, 2, 8, 2);
+			dl->setSpacing(8);
+			dl->addWidget(new QLabel(
+				QString::fromUtf8(obs_module_text("SceneAnchor.Menu.TransitionDuration")), durRow));
+			dl->addStretch();
+			dl->addWidget(spin);
+			wa->setDefaultWidget(durRow);
 			tm->addSeparator();
 			tm->addAction(wa);
 			obs_data_release(priv);
@@ -1465,8 +1498,16 @@ void TreeDock::onContextMenu(const QPoint &pos)
 					cv, p, INT_MAX, QString::fromUtf8(obs_module_text("SceneAnchor.NewFolder")));
 			});
 		});
+		// 底部 ＋ 按钮在选中文件夹时就是「建到这个文件夹里」，菜单里却没有这条路——
+		// 同一能力两套入口形状，鼠标用户从菜单进不来。补上，走同一个 createSceneInFolder。
+		QAction *addSc = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.AddSceneHere")));
+		connect(addSc, &QAction::triggered, this, [b, cv, p] { b->createSceneInFolder(cv, p); });
 		// fix round 1 Important：同场景分支，不捕获 pi，按 (cv, p) 在点击时重新定位。
-		QAction *ren = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Rename")));
+		// 键盘手势此前在界面上零可见性：F2 改名实现了但没有任何地方说。用 \t 把键位
+		// 排到菜单右侧那一列——**只显字不注册** QAction 快捷键：注册会抢 OBS 的全局键
+		// （F2 现在是树的内建编辑触发，Esc 是只吃搜索框焦点的 WidgetShortcut）。
+		QAction *ren = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Rename")) +
+					      QStringLiteral("\tF2"));
 		connect(ren, &QAction::triggered, this, [this, cv, p] {
 			const QModelIndex idx = findFolderIndex(cv, p);
 			if (idx.isValid())
@@ -1508,6 +1549,7 @@ void TreeDock::buildSettingsMenu(QMenu &menu)
 	auto *b = ObsBridge::get();
 	QMenu *dc = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.DoubleClick")));
 	const QString cur = b->doubleClickMode();
+	QString curLabel;
 	for (const auto &[key, label] :
 	     {std::pair<QString, QString>{QStringLiteral("transition"),
 					  QString::fromUtf8(obs_module_text("SceneAnchor.DC.Transition"))},
@@ -1516,9 +1558,14 @@ void TreeDock::buildSettingsMenu(QMenu &menu)
 		QAction *a = dc->addAction(label);
 		a->setCheckable(true);
 		a->setChecked(key == cur);
+		if (key == cur)
+			curLabel = label;
 		const QString k = key;
 		connect(a, &QAction::triggered, this, [b, k] { b->setDoubleClickMode(k); });
 	}
+	// 把当前值带到父项上：不点开就知道现在是什么，也不必为了看一眼设置钻进子菜单。
+	if (!curLabel.isEmpty())
+		dc->setTitle(QStringLiteral("%1  —  %2").arg(dc->title(), curLabel));
 
 	// 「选中即切换」与双击动作并列——两者都是"这个手势做什么"，属同一类。
 	QAction *sel = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.SelectSwitches")));

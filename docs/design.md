@@ -114,7 +114,7 @@ O(n)，n ≤ 数百。单 canvas 时不显示 canvas 分组层。自发操作用
 | 删除场景 | 确认对话框 → `obs_source_remove`，注册 undo |
 | 图标 | 自带 SVG（folder/scene/plus/minus 各深浅两套）。**深浅判定不用 `obs_frontend_is_theme_dark()`**：它返回的是解析自主题文件 `dark:` 键的 `OBSTheme::isDark`，System 主题没有该键、成员未初始化，返回值不可信。改问树视图实际画在什么背景上：`view_->palette().color(QPalette::Base).lightness() < 128` |
 
-**右键菜单**（全公开 API）：切换 / 转场覆盖（含时长 SpinBox）/ 重命名 / 复制场景（`obs_scene_duplicate`，新场景插为原节点兄弟）/ 复制粘贴滤镜（`obs_source_copy_filters`）/ 截图（`obs_frontend_take_source_screenshot`）/ 滤镜 / 窗口投影 / 全屏投影（`QGuiApplication::screens` 枚举显示器 → `obs_frontend_open_projector`）/ 多画面显隐 / 颜色子菜单。文件夹项：新建子文件夹 / 重命名 / 颜色 / 解散（子项上移）/ 删除（含场景则确认）。
+**右键菜单**（全公开 API）：转场到此场景 / 重命名（右侧标 `F2`，只显字不注册 QAction 快捷键——注册会抢 OBS 的全局键）/ 创建副本 / 删除场景（后果与可逆性写在 tooltip）/ **滤镜 ▸**（复制、粘贴、打开滤镜窗口；粘贴灰着时 tooltip 说明要先复制）/ **投影 ▸**（窗口投影、全屏投影 → `QGuiApplication::screens` 枚举显示器，报**物理**分辨率并按 `devicePixelRatio` 换算，Qt 6.8 还没有 `QScreen::physicalGeometry()`）/ 截屏（`obs_frontend_take_source_screenshot`）/ 转场覆盖（子菜单含「时长」标签 + SpinBox）/ 多画面显隐 / 颜色子菜单。文件夹项：新建子文件夹 / **在此文件夹新建场景**（与底部 ＋ 按钮同一条 `createSceneInFolder`）/ 重命名 / 颜色 / 解散（子项上移）/ 删除（含场景则确认）。滤镜与投影各自收一层，是因为这层菜单此前有 18 行、比 dock 本身还高，一屏放不下。
 
 **Undo/Redo**（`obs_frontend_add_undo_redo_action`）：
 - 树操作（移动/建删改文件夹/颜色）：undo_data = 操作前树 JSON 串，回调反序列化+重建，单一路径无特例

@@ -841,7 +841,7 @@ int main(int argc, char **argv)
 		openMenuAnd(dock, centerOf(dock, RowPlan::Scene), tag + "_menu-scene-transition",
 			    obs_module_text("SceneAnchor.Menu.TransitionOverride"));
 		openMenuAnd(dock, centerOf(dock, RowPlan::Scene), tag + "_menu-scene-projector",
-			    obs_module_text("SceneAnchor.Menu.FullscreenProjector"));
+			    obs_module_text("SceneAnchor.Menu.Projector"));
 		// 颜色子菜单要拍在**带色的那一行**上，才能验「当前色描边环」画没画出来
 		openMenuAnd(dock, centerOf(dock, RowPlan::Scene, 1), tag + "_menu-scene-colored",
 			    obs_module_text("SceneAnchor.Menu.Color"));
