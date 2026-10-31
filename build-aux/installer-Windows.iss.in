@@ -17,7 +17,7 @@
 ;
 ; 旧版（OBS 32 及本插件 1.0.1）的 %ProgramData%\...\<模块名>\bin\64bit 与
 ; <OBS 根>\obs-plugins\64bit 已被 OBS 33 标为 legacy，OBS 34 起不再加载；
-; 本安装包升级时会把它们清掉。
+; 本安装包升级时会把它们清掉（即使旧版是手动 zip 安装、没有卸载键）。
 ;
 ; 要提权（PrivilegesRequired=admin）。两个目标都是全机范围：OBS 安装目录自不必说；
 ; C:\ProgramData 的默认 ACL 虽然给 BUILTIN\Users 带 Write，但完全控制权只给 CREATOR OWNER，
@@ -152,43 +152,52 @@ begin
   end;
 end;
 
-// 升级/换布局时清掉旧位置。OBS 33 只认新布局；1.0.1 的 legacy 文件如果留着，
+// 升级/换布局时清掉旧位置。OBS 33 只认新布局；1.0.x 的 legacy 文件如果留着，
 // OBS 会把它标成 Legacy，版本还可能与新装的 DLL 不同。
+procedure CleanLegacyFiles(Path: string);
+begin
+  Path := RemoveBackslashUnlessRoot(Path);
+  if Path = '' then
+    Exit;
+  if IsUnderProgramData(Path) then
+    DelTree(Path + '\{#ModuleName}\bin', True, True, True)
+  else begin
+    DeleteFile(Path + '\obs-plugins\64bit\{#ModuleName}.dll');
+    DeleteFile(Path + '\obs-plugins\64bit\{#ModuleName}.pdb');
+    DelTree(Path + '\data\obs-plugins\{#ModuleName}', True, True, True);
+  end;
+end;
+
+procedure RemoveOldInstall(Path: string);
+begin
+  Path := RemoveBackslashUnlessRoot(Path);
+  if Path = '' then
+    Exit;
+  if IsUnderProgramData(Path) then begin
+    DelTree(Path + '\{#ModuleName}', True, True, True)
+  end else begin
+    CleanLegacyFiles(Path);
+    DelTree(Path + '\plugins\{#ModuleName}', True, True, True);
+  end;
+end;
+
 procedure RemoveStaleInstall();
 var
   OldPath: string;
   NewPath: string;
-  OldIsProgramData: Boolean;
 begin
+  // 先清目标目录里的旧布局。手动 zip 安装没有卸载键，只看注册表会漏掉。
+  NewPath := RemoveBackslashUnlessRoot(WizardDirValue());
+  CleanLegacyFiles(NewPath);
+
   if not RegQueryStringValue(HKLM, UninstallKey, 'InstallLocation', OldPath) then
     Exit;
   OldPath := RemoveBackslashUnlessRoot(OldPath);
-  if OldPath = '' then
+  if (OldPath = '') or (CompareText(OldPath, NewPath) = 0) then
     Exit;
-  NewPath := RemoveBackslashUnlessRoot(WizardDirValue());
-  OldIsProgramData := IsUnderProgramData(OldPath);
-
-  if CompareText(OldPath, NewPath) = 0 then begin
-    // 同一目录升级：只清 1.0.1 的 legacy 二进制；新布局文件由 Inno 覆盖。
-    if OldIsProgramData then
-      DelTree(OldPath + '\{#ModuleName}\bin', True, True, True)
-    else begin
-      DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.dll');
-      DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.pdb');
-      DelTree(OldPath + '\data\obs-plugins\{#ModuleName}', True, True, True);
-    end;
-    Exit;
-  end;
 
   // 换了安装目录：整套删掉旧位置，避免两份插件同时被 OBS 扫到。
-  if OldIsProgramData then
-    DelTree(OldPath + '\{#ModuleName}', True, True, True)
-  else begin
-    DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.dll');
-    DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.pdb');
-    DelTree(OldPath + '\data\obs-plugins\{#ModuleName}', True, True, True);
-    DelTree(OldPath + '\plugins\{#ModuleName}', True, True, True);
-  end;
+  RemoveOldInstall(OldPath);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
