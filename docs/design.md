@@ -150,6 +150,8 @@ O(n)，n 为场景数（基准按 600 跑）。单 canvas 时不显示 canvas �
 
 **菜单里的当前项标示不能依赖 QAction 勾选**：带图标的 QAction，勾与图标抢同一列，在 OBS 样式表下勾被图标盖掉。颜色子菜单改用描边环；无图标的选项（如「最近使用」「图标」）用勾正常。
 
+**⋯ 按钮不叠 Qt 的菜单角标，凡是「按钮 = 菜单」的地方一律显式 `InstantPopup`**：Qt 给每个挂了菜单的 QToolButton 在右下角再画一个小箭头，OBS 的主题只覆盖了 `QPushButton::menu-indicator`，QToolButton 那份照旧画。工具栏的 ⋯ 与 MRU 末尾的 ⋯ 本身就是「这里还有更多」的图形，两个记号挤在 25px 宽里被读成一个画坏了的图标。这两个按钮各带一条 `QToolButton::menu-indicator { image: none; width: 0px; }`——部件级样式表与应用级是叠加的，按钮其余外观仍走 OBS 主题。同一个按钮还踩过另一个坑：MRU 那个 ⋯ 没设 `popupMode`，默认 `DelayedPopup` 的单击只发 `clicked()` 而没人接住它，要按住才出菜单——界面上「按钮点了没反应」和「这个功能是坏的」长得一模一样，无法区分。
+
 ## 7. 保存与崩溃安全
 
 - OBS 保存集合 → `on_save` 写 modules；加载 → `on_load` 读，`FINISHED_LOADING`/`SCENE_COLLECTION_CHANGED` 时重建
@@ -159,7 +161,7 @@ O(n)，n 为场景数（基准按 600 跑）。单 canvas 时不显示 canvas �
 
 obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / macOS universal `.pkg` / Linux `.deb`（另出 `-dbgsym.ddeb` 与一份源码 `source.tar.xz`）——**Linux 没有 tar.gz**，早先这里写的 `deb+tar.gz` 是照抄模板文档、未经核对。`buildspec.json` 锁 obs-deps 与 Qt 版本。**仅 OBS 33+**，Windows 安装包按 OBS 33 的新插件布局（`<plugins>/<module>/<module>.dll + data`）分发；OBS 32 用户留在 1.0.1。本地开发 Windows，三平台走 GitHub Actions。
 
-**pin 策略：锁最老的受支持目标，不锁最新。** 当前 obs-studio 33.0.0 + Qt 6.11.1（obs-deps 2026-10-23）。对着 33.0.0 头文件编译，保证只调用整个 OBS 33.x 都存在的 API；Qt 6.11.1 是 OBS 33.0 自带的 Qt，插件因此能在 OBS 33 的运行时里加载。仅当支持范围移动或确需更新 API 时才抬 pin。OBS 33.0.1 在 Windows 上跑过加载/面板/搜索/切换、MRU 顺序、单击延迟模式、集合复制/切换/重命名 + 强杀、热键搜索流程、关闭日志，以及发布清单第 1–8、10–13、15–20 项；第 9 项不适用，第 14 项已于 33.0.0 全新配置上通过，真实自定义色对话框点选也已通过，物理热键/Studio Mode 留待发版前补做。macOS 与 Linux 目标能在 CI 上编译打包，插件也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过；README 的「已知限制」里如实声明了这一点，别在发布材料里把「三平台出包」写成「三平台验证过」。
+**pin 策略：锁最老的受支持目标，不锁最新。** 当前 obs-studio 33.0.0 + Qt 6.11.1（obs-deps 2026-10-23）。对着 33.0.0 头文件编译，保证只调用整个 OBS 33.x 都存在的 API；Qt 6.11.1 是 OBS 33.0 自带的 Qt，插件因此能在 OBS 33 的运行时里加载。仅当支持范围移动或确需更新 API 时才抬 pin。OBS 33.0.1 在 Windows 上跑过加载/面板/搜索/切换、MRU 顺序、单击延迟模式、集合复制/切换/重命名 + 强杀、热键搜索流程、关闭日志，以及发布清单第 1–8、10–13、15–20 项；第 9 项不适用，第 14 项已于 33.0.0 全新配置上通过，真实自定义色对话框点选也已通过；第 18 项用走系统输入队列的注入按键重跑过，抓到一个热键拿不到键盘焦点的缺陷并修掉（浮动 dock 的顶层窗口没被激活），只剩发版当天用物理键再按一次。macOS 与 Linux 目标能在 CI 上编译打包，插件也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过；README 的「已知限制」里如实声明了这一点，别在发布材料里把「三平台出包」写成「三平台验证过」。
 
 **插件清单 `manifest.json` 由 CMake 生成，不是静态文件。** OBS 33 的 `obs_module_load_metadata` 会读插件 data 目录下的这个文件；`display_name` 一旦存在就**压过** C 导出的 `obs_module_name()`，所以品牌名在这里定死为英文，界面里那个可本地化的名字由 dock 标题承担。名字、id、版本、网址全部从 `buildspec.json` 取，发版时不会漏改一处。完整取舍写在 `CMakeLists.txt` 生成它的那几行上方，此处不复述。
 

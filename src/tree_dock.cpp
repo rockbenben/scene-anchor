@@ -106,6 +106,15 @@ static QIcon anchorDotsIcon(bool dark)
 	return anchorIcon(dark ? "icons/dots_dark.svg" : "icons/dots_light.svg");
 }
 
+// Qt 给每个挂了菜单的 QToolButton 在右下角再画一个小箭头（OBS 的主题只覆盖了
+// QPushButton 的那一份）。这两个按钮自己长得就是 ⋯，已经表示"这里还有更多"，
+// 两个记号挤在 25px 宽里会被读成一个画坏的图形。菜单是单击展开的，箭头纯属重复提示。
+// 只加这一条子控件规则：部件级样式表与 OBS 的应用级样式表是叠加的，按钮其余外观仍走主题。
+static void hideMenuIndicator(QToolButton *btn)
+{
+	btn->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0px; }"));
+}
+
 // MRU chip 的宽度上限。量具 tests/ux_probe.cpp 实测：不设上限时五个中文场景名的 chip
 // 自然宽度合计 911px，QHBoxLayout 的最小宽度因而被顶到 915px，并原样传导成整个 dock 的
 // 最小宽度——dock 无法被拖窄成侧边栏，且在任何宽度下最右侧 chip 都溢出容器（截图可见）。
@@ -602,6 +611,7 @@ TreeDock::TreeDock()
 	btnSettings_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Settings")));
 	btnSettings_->setAccessibleName(btnSettings_->toolTip());
 	btnSettings_->setPopupMode(QToolButton::InstantPopup);
+	hideMenuIndicator(btnSettings_);
 	// 「造」的两枚与「毁」的一枚之间加一条分隔：此前三个 25×25 的按钮同权重并排，
 	// 而其中一枚点下去对文件夹是静默解散结构、对场景是弹确认框——后果最重的那个
 	// 长得和最轻的一样。删除键同时换成垃圾桶形（'-' 容易被读成「折叠」）。
@@ -1484,7 +1494,11 @@ void TreeDock::refreshMru()
 			mruMore_->setAutoRaise(true);
 			mruMore_->setText(QStringLiteral("⋯"));
 			mruMore_->setFixedWidth(kMruOverflowWidth - 2);
-			mruMore_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.ShowMru")));
+			// 默认是 DelayedPopup：单击只发 clicked()，要按住才出菜单——一个没有任何
+			// 动作接住的单击，看起来就是按钮坏了。
+			mruMore_->setPopupMode(QToolButton::InstantPopup);
+			hideMenuIndicator(mruMore_);
+			mruMore_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Mru.More")));
 			mruMore_->setAccessibleName(mruMore_->toolTip());
 			mruMoreMenu_ = new QMenu(mruMore_);
 			mruMore_->setMenu(mruMoreMenu_);
