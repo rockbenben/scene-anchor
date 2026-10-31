@@ -95,6 +95,11 @@ build() {
 
   pushd ${project_root}
 
+  # Xcode 26.5 exports MACOSX_DEPLOYMENT_TARGET for the host and defaults the
+  # two slices differently. The preset and xcodebuild below set the real floor;
+  # clear the inherited value so the autogen scripts cannot conflict with it.
+  unset MACOSX_DEPLOYMENT_TARGET
+
   local -a cmake_args=()
   local -a cmake_build_args=(--build)
   local -a cmake_install_args=(--install)
@@ -128,6 +133,7 @@ build() {
 
   local -a build_args=(
     ONLY_ACTIVE_ARCH=NO
+    MACOSX_DEPLOYMENT_TARGET=13.0
     -arch arm64
     -arch x86_64
     -project ${product_name}.xcodeproj
