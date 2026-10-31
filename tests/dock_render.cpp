@@ -750,7 +750,7 @@ int main(int argc, char **argv)
 	QApplication app(argc, argv);
 	if (theme != "system") {
 		QApplication::setStyle("Fusion");
-		const QString td = root + "/.deps/obs-studio-32.0.2/frontend/data/themes";
+		const QString td = root + "/.deps/obs-studio-33.0.0/frontend/data/themes";
 		std::map<QString, QString> resolved;
 		const Theme th = theme == "light" ? parseTheme(td + "/Yami_Light.ovt", td + "/Yami.obt")
 						  : parseTheme(td + "/Yami.obt", QString());

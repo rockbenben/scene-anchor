@@ -4,22 +4,20 @@
 ; 发行时由 .github/scripts/Package-Windows.ps1 调 iscc 编译——改这个文件，不要改生成物。
 ;
 ; ── 两套布局，按用户选的目录切 ─────────────────────────────────────────────
-; Windows 上 OBS 从两个地方加载插件，且要求的目录结构**不同**：
+; OBS 33 起第三方插件统一为 <plugins>\<模块名>\<模块名>.dll + <plugins>\<模块名>\data，
+; 只有根目录不同：
 ;
-;   ① %ProgramData%\obs-studio\plugins\<模块名>\bin\64bit  +  ...\<模块名>\data
-;      依据 obs-studio 32 的 frontend/widgets/OBSBasic.cpp::AddExtraModulePaths()：
-;      Windows 分支走 GetProgramDataPath(..., "obs-studio/plugins/%module%")，而
-;      os_get_program_data_path 用的是 CSIDL_COMMON_APPDATA，即 C:\ProgramData
-;      （**不是** %APPDATA%，那是 CSIDL_APPDATA，Windows 上不参与插件扫描——只有
-;      Linux 分支才用 config path）；随后 obs_add_module_path(path + "/bin/64bit",
-;      path + "/data")。默认走这一套：OBS 更新重写自身安装目录时不会波及它。
+;   ① %ProgramData%\obs-studio\plugins\<模块名>\
+;      普通安装（含 Program Files 安装）走这里。依据 OBS 33 的
+;      frontend/plugin-manager/PluginModuleLoader_Windows.cpp：system root 走
+;      os_get_program_data_path(..., "obs-studio/plugins/%module%")，即 CSIDL_COMMON_APPDATA。
 ;
-;   ② <OBS 目录>\obs-plugins\64bit  +  <OBS 目录>\data\obs-plugins\<模块名>
-;      OBS 自身安装目录的布局。便携版**只**认这一套——portable_mode 下
-;      AddExtraModulePaths() 直接 return，①根本不会被扫描。
+;   ② <OBS 根>\plugins\<模块名>\
+;      便携版走这里。portable root 固定为 <OBS 根>/plugins/%module%，不看 ProgramData。
 ;
-; 所以目录选择页是开着的，[Files] 里两套载荷各挂一个 Check:，按用户选的目录是否落在
-; {commonappdata} 下决定装哪一套。做法照搬 advanced-scene-switcher。
+; 旧版（OBS 32 及本插件 1.0.1）的 %ProgramData%\...\<模块名>\bin\64bit 与
+; <OBS 根>\obs-plugins\64bit 已被 OBS 33 标为 legacy，OBS 34 起不再加载；
+; 本安装包升级时会把它们清掉。
 ;
 ; 要提权（PrivilegesRequired=admin）。两个目标都是全机范围：OBS 安装目录自不必说；
 ; C:\ProgramData 的默认 ACL 虽然给 BUILTIN\Users 带 Write，但完全控制权只给 CREATOR OWNER，
@@ -32,7 +30,7 @@
 ; AppId 决定"升级同一个产品"还是"并排装第二份"，一旦发布就不能再改。
 #define AppGuid "C459A50D-D80F-461D-8A3B-4854C1CA7A11"
 
-; 打包时由 Package-Windows.ps1 用 /D 覆盖成本次构建真实的载荷目录（其下有 recommended\
+; 打包时由 Package-Windows.ps1 用 /D 覆盖成本次构建真实的载荷目录（其下有 programdata\
 ; 与 portable\ 两棵树）。这里的默认值只为在本机手动跑 iscc 时开箱可用。
 #ifndef PackageDir
   #define PackageDir "@CMAKE_CURRENT_SOURCE_DIR@\release\Package"
@@ -72,12 +70,12 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 ; .pdb 只对崩溃分析有用，装机不需要——zip 里仍然带着，报 bug 的人从那里取。
-; 推荐布局：{app} = ...\obs-studio\plugins，载荷自带 scene-anchor\ 这一层。
-Source: "{#PackageDir}\recommended\*"; DestDir: "{app}"; Excludes: "*.pdb"; \
-    Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsRecommendedLayout
-; OBS 目录布局：{app} = OBS 根目录，载荷自带 obs-plugins\ 与 data\ 两层。
+; ProgramData 布局：{app} = ...\plugins，载荷自带 scene-anchor\ 这一层。
+Source: "{#PackageDir}\programdata\*"; DestDir: "{app}"; Excludes: "*.pdb"; \
+    Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsProgramDataLayout
+; 便携版布局：{app} = OBS 根目录，载荷自带 plugins\scene-anchor\。
 Source: "{#PackageDir}\portable\*"; DestDir: "{app}"; Excludes: "*.pdb"; \
-    Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsLegacyLayout
+    Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsPortableLayout
 
 [Messages]
 ; 装完看不到面板是这个插件第一位的支持问题（README 里也单开了一段）。安装包是唯一
@@ -88,20 +86,20 @@ en.FinishedLabel=Setup has installed [name] on your computer.%n%nThe dock is hid
 const
   UninstallKey = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{' + '{#AppGuid}' + '}_is1';
 
-// 选中的目录落在 %ProgramData% 下 = 用推荐布局。前缀匹配，与 advanced-scene-switcher 一致。
+// 选中的目录落在 %ProgramData% 下 = 用 ProgramData 布局。前缀匹配，与 advanced-scene-switcher 一致。
 function IsUnderProgramData(Path: string): Boolean;
 begin
   Result := Pos(LowerCase(ExpandConstant('{commonappdata}')), LowerCase(Path)) = 1;
 end;
 
-function IsRecommendedLayout(): Boolean;
+function IsProgramDataLayout(): Boolean;
 begin
   Result := IsUnderProgramData(WizardDirValue());
 end;
 
-function IsLegacyLayout(): Boolean;
+function IsPortableLayout(): Boolean;
 begin
-  Result := not IsRecommendedLayout();
+  Result := not IsProgramDataLayout();
 end;
 
 function GetDirName(Value: string): string;
@@ -114,7 +112,7 @@ begin
 end;
 
 // 目录页放行前先挡两个必然装出「不加载的插件」的选法。两种错法都不会报错、只会静默失效，
-// 用户看到的是「装成功了但插件不见了」——最难排查的那一类，值得在这里花十几行。
+// 用户看到的是「装成功了但插件不见了」——最难排查的那一类，值得在这里花几十行。
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   Dir: string;
@@ -125,8 +123,8 @@ begin
 
   Dir := RemoveBackslashUnlessRoot(WizardDirValue());
   if IsUnderProgramData(Dir) then begin
-    // 推荐布局：载荷自带 scene-anchor\ 那一层，所以必须选到 ...\plugins 为止，
-    // 多选一层会装成 ...\plugins\scene-anchor\scene-anchor\bin\64bit。
+    // ProgramData 布局：载荷自带 scene-anchor\ 那一层，所以必须选到 ...\plugins 为止，
+    // 多选一层会装成 ...\plugins\scene-anchor\scene-anchor\。
     if CompareText(ExtractFileName(Dir), 'plugins') <> 0 then begin
       MsgBox('Under ProgramData the target must be the OBS plugins folder itself,'
              + #13#10 + 'e.g. ' + ExpandConstant('{commonappdata}\obs-studio\plugins') + #13#10#13#10
@@ -134,40 +132,62 @@ begin
       Result := False;
     end;
   end else begin
-    // OBS 目录布局：载荷自带 obs-plugins\，所以必须选到 OBS 根目录。判据同 waveform。
-    if not DirExists(Dir + '\obs-plugins\64bit') then begin
-      MsgBox('No obs-plugins\64bit folder here, so this is not an OBS installation.'
-             + #13#10 + 'Pick the OBS Studio root folder (portable or installed),' + #13#10
+    // 便携版布局：载荷自带 plugins\，所以必须选到 OBS 根目录。
+    if not FileExists(Dir + '\bin\64bit\obs64.exe') then begin
+      MsgBox('No bin\64bit\obs64.exe folder here, so this is not an OBS installation.'
+             + #13#10 + 'Pick the OBS Studio root folder (portable mode),' + #13#10
              + 'or install to ' + ExpandConstant('{commonappdata}\obs-studio\plugins') + ' instead.',
              mbError, MB_OK);
       Result := False;
+    end else if not FileExists(Dir + '\portable_mode.txt') then begin
+      // 普通安装的 OBS 只读 ProgramData；这里再拦一次，避免把便携版载荷装进 Program Files
+      // 之后得到一个完全不加载的插件。用 --portable 启动但没有 flag 文件的用户仍可继续。
+      if MsgBox('This OBS folder does not have portable_mode.txt.'
+                + #13#10 + 'Only portable OBS reads plugins from <OBS>\plugins.' + #13#10#13#10
+                + 'For a normal install, use ' + ExpandConstant('{commonappdata}\obs-studio\plugins')
+                + '.' + #13#10
+                + 'Continue only if you start OBS with --portable.', mbConfirmation, MB_YESNO) = IDNO then
+        Result := False;
     end;
   end;
 end;
 
-// 换布局重装时，把上一处的文件删掉。不删的话两份 dll 同时躺在 OBS 的两个搜索路径里，
-// OBS 会加载其中一份并对另一份记一行 "module already loaded"——版本还可能不一样，
-// 而用户完全看不出自己在跑哪一份。advanced-scene-switcher 只处理了旧→新一个方向，
-// 这里两个方向都处理：反过来一样会留幽灵。
+// 升级/换布局时清掉旧位置。OBS 33 只认新布局；1.0.1 的 legacy 文件如果留着，
+// OBS 会把它标成 Legacy，版本还可能与新装的 DLL 不同。
 procedure RemoveStaleInstall();
 var
   OldPath: string;
+  NewPath: string;
+  OldIsProgramData: Boolean;
 begin
   if not RegQueryStringValue(HKLM, UninstallKey, 'InstallLocation', OldPath) then
     Exit;
+  OldPath := RemoveBackslashUnlessRoot(OldPath);
   if OldPath = '' then
     Exit;
-  OldPath := RemoveBackslashUnlessRoot(OldPath);
-  // 上一次与这一次是同一套布局 → Inno 自己覆盖即可，不用手动删。
-  if IsUnderProgramData(OldPath) = IsRecommendedLayout() then
-    Exit;
+  NewPath := RemoveBackslashUnlessRoot(WizardDirValue());
+  OldIsProgramData := IsUnderProgramData(OldPath);
 
-  if IsUnderProgramData(OldPath) then begin
-    DelTree(OldPath + '\{#ModuleName}', True, True, True);
-  end else begin
+  if CompareText(OldPath, NewPath) = 0 then begin
+    // 同一目录升级：只清 1.0.1 的 legacy 二进制；新布局文件由 Inno 覆盖。
+    if OldIsProgramData then
+      DelTree(OldPath + '\{#ModuleName}\bin', True, True, True)
+    else begin
+      DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.dll');
+      DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.pdb');
+      DelTree(OldPath + '\data\obs-plugins\{#ModuleName}', True, True, True);
+    end;
+    Exit;
+  end;
+
+  // 换了安装目录：整套删掉旧位置，避免两份插件同时被 OBS 扫到。
+  if OldIsProgramData then
+    DelTree(OldPath + '\{#ModuleName}', True, True, True)
+  else begin
     DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.dll');
     DeleteFile(OldPath + '\obs-plugins\64bit\{#ModuleName}.pdb');
     DelTree(OldPath + '\data\obs-plugins\{#ModuleName}', True, True, True);
+    DelTree(OldPath + '\plugins\{#ModuleName}', True, True, True);
   end;
 end;
 

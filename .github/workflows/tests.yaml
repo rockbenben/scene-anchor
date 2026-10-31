@@ -1,13 +1,15 @@
 name: Unit Tests
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
+permissions:
+  contents: read
 jobs:
   tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Check locale files 🌐
+        run: python3 tools/check-locales.py
       - run: sudo apt-get update && sudo apt-get install -y qt6-base-dev cmake ninja-build
       - run: cmake -S tests -B build_tests -G Ninja
       - run: cmake --build build_tests

@@ -81,23 +81,22 @@ function Package {
         throw "Inno Setup script not found: ${IsccFile}. Configure the project before packaging."
     }
 
-    # 安装包要带两套布局，让用户既能装进 %ProgramData%\obs-studio\plugins（推荐），也能装进
-    # OBS 自己的目录（便携版只认这一套）。两套目录结构不同，由 .iss 的 Check: 按用户选的
-    # 目录挑一套装。为什么是这两套、依据哪段 OBS 源码，都写在 installer-Windows.iss.in 顶部。
+    # 安装包要带两套载荷，结构相同、根不同：
+    #   ① %ProgramData%\obs-studio\plugins\<ProductName>\（普通安装）
+    #   ② <OBS 根>\plugins\<ProductName>\（便携版）
+    # 由 .iss 的 Check: 按用户选的目录挑一套装。依据与校验写在 installer-Windows.iss.in 顶部。
     $PackageRoot = "${ProjectRoot}/release/Package"
     $Staged = "${ProjectRoot}/release/${Configuration}/${ProductName}"
 
     Remove-Item -Path $PackageRoot -Recurse -Force -ErrorAction SilentlyContinue
 
-    # 推荐布局：DestDir 是 ...\plugins，所以载荷要自带 <ProductName>\ 这一层。
-    New-Item -Path "${PackageRoot}/recommended" -ItemType Directory -Force | Out-Null
-    Copy-Item -Path $Staged -Destination "${PackageRoot}/recommended/${ProductName}" -Recurse -Force
+    # ProgramData 布局：DestDir 是 ...\plugins，所以载荷要自带 <ProductName>\ 这一层。
+    New-Item -Path "${PackageRoot}/programdata" -ItemType Directory -Force | Out-Null
+    Copy-Item -Path $Staged -Destination "${PackageRoot}/programdata/${ProductName}" -Recurse -Force
 
-    # OBS 目录布局：DestDir 是 OBS 根目录，载荷自带 obs-plugins\ 与 data\ 两层。
-    New-Item -Path "${PackageRoot}/portable/obs-plugins" -ItemType Directory -Force | Out-Null
-    New-Item -Path "${PackageRoot}/portable/data/obs-plugins" -ItemType Directory -Force | Out-Null
-    Copy-Item -Path "${Staged}/bin/64bit" -Destination "${PackageRoot}/portable/obs-plugins/64bit" -Recurse -Force
-    Copy-Item -Path "${Staged}/data" -Destination "${PackageRoot}/portable/data/obs-plugins/${ProductName}" -Recurse -Force
+    # 便携版布局：DestDir 是 OBS 根目录，载荷自带 plugins\<ProductName>\。
+    New-Item -Path "${PackageRoot}/portable/plugins" -ItemType Directory -Force | Out-Null
+    Copy-Item -Path $Staged -Destination "${PackageRoot}/portable/plugins/${ProductName}" -Recurse -Force
 
     # 裸调 iscc：GitHub 的 windows runner 预装了 Inno Setup 并且在 PATH 上。这不是推断——
     # advanced-scene-switcher 与 waveform 都在 runner 上这么调，且都在持续发出 Installer.exe。

@@ -12,13 +12,30 @@
 缺失时会自动跳过第 1 项。
 """
 
-import io, os, re, glob, unicodedata
+import io, os, re, glob, subprocess, unicodedata
 
 MINE = "data/locale"
-OBS = ".deps/obs-studio-32.0.2/frontend/data/locale"
+OBS = ".deps/obs-studio-33.0.0/frontend/data/locale"
 SRC = ["src/tree_dock.cpp", "src/tree_dock.h", "src/obs_bridge.cpp", "src/obs_bridge.h", "src/module.cpp"]
 
 problems = []
+
+
+def autocrlf_normalizes():
+    # Windows 检出把 LF 变 CRLF；Git 提交时又会转回 LF。此时按 LF 读取，
+    # 避免把工作区行尾当成仓库内容误报；Linux CI 上 core.autocrlf 未开，
+    # CRLF 检查照常执行。
+    try:
+        out = subprocess.run(["git", "config", "--get", "core.autocrlf"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and out.stdout.strip().lower() in ("true", "input")
+
+
+EOL_NORMALIZE = autocrlf_normalizes()
+if EOL_NORMALIZE:
+    print("◆ core.autocrlf 已开启：按 LF 读取，跳过 CRLF 检查（CI 上仍会检查）\n")
 
 
 def note(sev, where, msg):
@@ -28,6 +45,8 @@ def note(sev, where, msg):
 def parse(path):
     """返回 (有序键值, 原始行, 各类结构问题)"""
     raw = io.open(path, "rb").read()
+    if EOL_NORMALIZE:
+        raw = raw.replace(b"\r\n", b"\n")
     issues = []
     if raw.startswith(b"\xef\xbb\xbf"):
         issues.append("文件以 BOM 开头")
@@ -74,12 +93,15 @@ print(f"◆ 语言文件 {len(files)} 个，基准 en-US 共 {len(base)} 键\n")
 # ── 1. OBS 是否支持这些语言（不支持的话文件永远不会被加载） ─────────────────
 print("── 1. 语言代码 vs OBS 自身支持的 locale ──")
 obs_langs = {os.path.basename(p)[:-4] for p in glob.glob(OBS + "/*.ini")}
-for p in files:
-    lang = os.path.basename(p)[:-4]
-    if lang not in obs_langs:
-        note("!", lang, "OBS 不提供该 locale，此文件永远不会被加载")
-print(f"   OBS 提供 {len(obs_langs)} 种；我们的 {len(files)} 种全部在内: "
-      f"{all(os.path.basename(p)[:-4] in obs_langs for p in files)}")
+if obs_langs:
+    for p in files:
+        lang = os.path.basename(p)[:-4]
+        if lang not in obs_langs:
+            note("!", lang, "OBS 不提供该 locale，此文件永远不会被加载")
+    print(f"   OBS 提供 {len(obs_langs)} 种；我们的 {len(files)} 种全部在内: "
+          f"{all(os.path.basename(p)[:-4] in obs_langs for p in files)}")
+else:
+    print(f"   .deps 下没有 OBS 源码，跳过本项（CI 不装 .deps 时也会跳过）")
 
 # ── 2. 键集 / 结构 / 占位符 ──────────────────────────────────────────────
 print("\n── 2. 键集、结构、占位符 ──")
@@ -182,11 +204,14 @@ for k in unused:
 
 # ── 汇总 ────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
+hard = [x for x in problems if x[0] == "!"]
+soft = [x for x in problems if x[0] == "~"]
 if not problems:
     print("◆ 全部检查通过，未发现问题")
 else:
-    hard = [x for x in problems if x[0] == "!"]
-    soft = [x for x in problems if x[0] == "~"]
     print(f"◆ 硬问题 {len(hard)} 处，提示 {len(soft)} 处")
     for sev, where, msg in hard + soft:
         print(f"   [{'错误' if sev == '!' else '提示'}] {where}: {msg}")
+
+if hard:
+    raise SystemExit(1)

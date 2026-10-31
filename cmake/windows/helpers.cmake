@@ -22,12 +22,14 @@ function(set_target_properties_plugin target)
 
   set_target_properties(${target} PROPERTIES VERSION 0 SOVERSION ${PLUGIN_VERSION})
 
-  install(TARGETS ${target} RUNTIME DESTINATION "${target}/bin/64bit" LIBRARY DESTINATION "${target}/bin/64bit")
+  # OBS 33 的第三方插件布局：<plugins>/<module>/<module>.dll + <plugins>/<module>/data。
+  # 旧模板的 <module>/bin/64bit 现在只是 OBS 34 前的 legacy 位置，不再生成。
+  install(TARGETS ${target} RUNTIME DESTINATION "${target}" LIBRARY DESTINATION "${target}")
 
   install(
     FILES "$<TARGET_PDB_FILE:${target}>"
     CONFIGURATIONS RelWithDebInfo Debug Release
-    DESTINATION "${target}/bin/64bit"
+    DESTINATION "${target}"
     OPTIONAL
   )
 

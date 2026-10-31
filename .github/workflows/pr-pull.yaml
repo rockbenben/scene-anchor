@@ -19,9 +19,16 @@ jobs:
     permissions:
       contents: read
 
+  tests:
+    name: Unit Tests 🧪
+    uses: ./.github/workflows/tests.yaml
+    permissions:
+      contents: read
+
   build-project:
     name: Build Project 🧱
     uses: ./.github/workflows/build-project.yaml
     secrets: inherit
     permissions:
       contents: read
+      pull-requests: read
