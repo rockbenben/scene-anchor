@@ -495,7 +495,14 @@ TreeDock::TreeDock()
 			dw->show();
 			dw->raise();
 		}
-		search_->setFocus(Qt::ShortcutFocusReason);
+		// ActiveWindowFocusReason + 显式激活顶层窗口，缺一不可：OBS 33 起 dock 注册时就被
+		// setFloating(true)，我们的 widget 因此待在自己的顶层窗口里。对非活跃顶层窗口的部件
+		// 调 setFocus 只会记下"该窗口内谁持有焦点"，系统键盘焦点仍留在 OBS 主窗口——
+		// 实测表现为热键按下去毫无反应，紧接着打字也进不了搜索框。
+		// 只换 reason 不够：Qt 并不会因此激活窗口（实测 isActiveWindow() 仍为 false），
+		// 必须自己 activateWindow()。dock 模式下顶层就是 OBS 主窗口，多这一步无害。
+		search_->window()->activateWindow();
+		search_->setFocus(Qt::ActiveWindowFocusReason);
 		search_->selectAll(); // 直接打字即替换上次的关键词
 	});
 
