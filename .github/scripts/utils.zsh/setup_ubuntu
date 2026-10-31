@@ -35,34 +35,36 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
     sudo apt-get install ${apt_args} gcc-${${target##*-}//_/-}-linux-gnu g++-${${target##*-}//_/-}-linux-gnu
   }
 
-  sudo add-apt-repository --yes ppa:obsproject/obs-studio
-
-  # Ubuntu 26.04 resolves packages against amd64v3, but the OBS PPA only
-  # publishes binary-amd64. Without both architectures apt ignores the PPA
-  # and installs the archive's OBS 32.1, which has no CMake development files.
-  local ppa_source
-  for ppa_source in /etc/apt/sources.list.d/*obsproject*(N); do
-    if [[ ${ppa_source} == *.sources ]]; then
-      sudo sed -i '/^Architectures:/d' ${ppa_source}
-      echo 'Architectures: amd64 amd64v3' | sudo tee -a ${ppa_source} > /dev/null
-    fi
-  done
-
-  sudo apt update
-
-  local obs_version obs_candidate
+  # Ubuntu 26.04 resolves packages against amd64v3 while the OBS PPA only
+  # publishes binary-amd64; apt therefore ignores the PPA and falls back to
+  # the archive's OBS 32.1. Download the pinned PPA package explicitly.
+  local ubuntu_codename obs_version obs_packages obs_filename obs_url obs_deb
+  ubuntu_codename="$(awk -F= '/^VERSION_CODENAME=/{gsub(/"/, "", $2); print $2}' /etc/os-release)"
   obs_version="$(jq -r '.dependencies["obs-studio"].version' ${project_root}/buildspec.json)"
-  obs_candidate="$(apt-cache policy obs-studio | awk '/Candidate:/{print $2}')"
-  if [[ ${obs_candidate} != ${obs_version}* ]]; then
-    log_error "Expected OBS ${obs_version} from the PPA, got ${obs_candidate:-nothing}"
+  obs_packages="$(mktemp)"
+  obs_deb="$(mktemp --suffix=.deb)"
+  curl -fsSL \
+    "https://ppa.launchpadcontent.net/obsproject/obs-studio/ubuntu/dists/${ubuntu_codename}/main/binary-amd64/Packages.gz" \
+    | gzip -dc > ${obs_packages}
+  obs_filename="$(awk -v version="${obs_version}" '
+    /^Package:/ { pkg = ($2 == "obs-studio") }
+    pkg && /^Version:/ { ver = $2 }
+    pkg && /^Filename:/ { if (ver == version || index(ver, version "-") == 1) { print $2; exit } }
+  ' ${obs_packages})"
+  if [[ -z ${obs_filename} ]]; then
+    log_error "OBS ${obs_version} not found in the OBS PPA Packages index"
     return 2
   fi
+  obs_url="https://ppa.launchpadcontent.net/obsproject/obs-studio/ubuntu/${obs_filename}"
+  curl -fsSL "${obs_url}" -o ${obs_deb}
 
+  sudo apt update
   sudo apt-get install ${apt_args} \
     build-essential \
     libgles2-mesa-dev \
     libsimde-dev \
-    obs-studio
+    ${obs_deb}
+  rm -f ${obs_packages} ${obs_deb}
 
   local -a _qt_packages=()
 
