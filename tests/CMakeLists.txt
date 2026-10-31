@@ -5,6 +5,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 get_filename_component(SA_QT_PREFIX "${Qt6_DIR}/../../.." ABSOLUTE)
 set(SA_QT_PLUGIN_DIR "${SA_QT_PREFIX}/plugins")
+
+# UI 目标编译真的 tree_dock.cpp，需要 OBS 头文件；运行时仍是 fake_obs，不链 libobs。
+# 本地构建的头文件在 .deps/include（不进仓库），干净克隆/CI 用 libobs-dev 的 /usr/include/obs。
+find_path(
+  SA_OBS_INCLUDE_DIR
+  NAMES obs.h
+  PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../.deps/include" "/usr/include/obs"
+  NO_DEFAULT_PATH
+)
+if(NOT SA_OBS_INCLUDE_DIR)
+  message(FATAL_ERROR "OBS headers not found. Install libobs-dev or pass -DSA_OBS_INCLUDE_DIR=<dir>.")
+endif()
 add_executable(
   test_tree_store
   test_tree_store.cpp
@@ -34,10 +46,7 @@ add_executable(
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.h
 )
-target_include_directories(
-  test_dock_ui
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src ${CMAKE_CURRENT_SOURCE_DIR}/../.deps/include
-)
+target_include_directories(test_dock_ui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src ${SA_OBS_INCLUDE_DIR})
 target_compile_definitions(
   test_dock_ui
   PRIVATE SA_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/.." SA_QT_PLUGIN_PATH="${SA_QT_PLUGIN_DIR}"
@@ -60,10 +69,7 @@ add_executable(
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.h
 )
-target_include_directories(
-  bench_dock
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src ${CMAKE_CURRENT_SOURCE_DIR}/../.deps/include
-)
+target_include_directories(bench_dock PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src ${SA_OBS_INCLUDE_DIR})
 target_compile_definitions(bench_dock PRIVATE SA_QT_PLUGIN_PATH="${SA_QT_PLUGIN_DIR}")
 target_link_libraries(bench_dock PRIVATE Qt6::Widgets)
 set_property(TARGET bench_dock PROPERTY AUTOMOC ON)
@@ -84,10 +90,7 @@ add_executable(
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../src/contrast.h
 )
-target_include_directories(
-  dock_render
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src ${CMAKE_CURRENT_SOURCE_DIR}/../.deps/include
-)
+target_include_directories(dock_render PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src ${SA_OBS_INCLUDE_DIR})
 target_link_libraries(dock_render PRIVATE Qt6::Widgets)
 set_property(TARGET dock_render PROPERTY AUTOMOC ON)
 enable_testing()

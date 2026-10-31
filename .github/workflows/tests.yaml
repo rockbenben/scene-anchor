@@ -10,7 +10,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check locale files 🌐
         run: python3 tools/check-locales.py
-      - run: sudo apt-get update && sudo apt-get install -y qt6-base-dev cmake ninja-build
+      # libobs-dev 只为 UI 测试提供 OBS 头文件；测试仍用 fake OBS 桩，不链接 libobs。
+      - run: sudo apt-get update && sudo apt-get install -y qt6-base-dev cmake ninja-build libobs-dev
       - run: cmake -S tests -B build_tests -G Ninja
       - run: cmake --build build_tests
       - run: ctest --test-dir build_tests --output-on-failure
