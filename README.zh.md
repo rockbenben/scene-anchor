@@ -93,7 +93,7 @@ C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
 
 **灰色地带**：转场覆盖存在 `"transition"` / `"transition_duration"` 这两个 private-settings 键下，多视图可见性存在 `"show_in_multiview"` 下。这些键可以通过公开 API 读写，但键名本身是 OBS 前端的约定而非有文档的 API 契约——未来某个 OBS 版本可能不打招呼就改掉。
 
-- **只有 Windows 经过真机验证。**[`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) 的人工检查已在 Windows 上对着 OBS 33.0.1 跑过第 1–8、10–13、15–20 项；第 9 项（副画布）没有对应插件，不适用。第 14 项（首次使用 dock 的可见性）以及自定义色对话框点选、物理热键与 Studio Mode 分支，仍按清单里的说明留待发版前补做。macOS 与 Linux 目标能在 CI 上编译打包，插件本身也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过。请把它们当作**未验证**而不是**有问题**，遇到什么也欢迎报给我。
+- **只有 Windows 经过真机验证。**[`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) 的人工检查已在 Windows 上对着 OBS 33.0.1 跑过第 1–8、10–13、15–20 项；第 9 项（副画布）没有对应插件，不适用。第 14 项（首次使用 dock 的可见性）已于 2026-10-31 在 OBS 33.0.0 的全新配置上补测通过。自定义色对话框点选、物理热键与 Studio Mode 分支，以及 Windows 1.0.1 → 2.0.0 升级，仍按清单里的说明留待发版前补做。macOS 与 Linux 目标能在 CI 上编译打包，插件本身也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过。请把它们当作**未验证**而不是**有问题**，遇到什么也欢迎报给我。
 
 ## 报告问题
 
