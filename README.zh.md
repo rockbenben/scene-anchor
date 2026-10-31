@@ -2,7 +2,7 @@
 
 # SceneAnchor
 
-> 给 OBS 32 场景列表加文件夹树——文件夹存在场景集合内部，复制或重命名集合都不会丢。
+> 给 OBS 场景列表加文件夹树——文件夹存在场景集合内部，复制或重命名集合都不会丢。
 
 [![License: GPL-2.0-or-later](https://img.shields.io/badge/License-GPL--2.0--or--later-blue)](LICENSE) [![365 开源计划 #037](https://img.shields.io/badge/365%20%E5%BC%80%E6%BA%90%E8%AE%A1%E5%88%92-%23037-1f6feb)](https://github.com/rockbenben/365opensource)
 
@@ -16,8 +16,8 @@
 
 | 项目 | 说明 |
 |---|---|
-| OBS Studio | 32.0 及以上（在 32.0.2 与 32.2.2 上实测） |
-| 平台 | Windows x64——开发与实测都在这上面。macOS（Universal）与 Ubuntu x86_64 能在 CI 上编译打包，但从未在真机上跑起来过，见「已知限制」|
+| OBS Studio | 33.0 及以上（在 33.0.1 上实测） |
+| 平台 | Windows x64——开发与实测都在这上面。macOS 13+（Universal）与 Ubuntu 26.04 x86_64 能在 CI 上编译打包，但从未在真机上跑起来过，见「已知限制」|
 | 场景 | 仅主画布，副画布场景不进树，见「已知限制」 |
 | 界面语言 | 12 种，跟随 OBS 自身的语言设置 |
 | 安装 | Windows 用 `.exe` 安装包或 `.zip` · macOS 用 `.pkg` 安装包（未签名，见「安装」）· Linux 用 `.deb` |
@@ -55,18 +55,20 @@
 
 到 [Releases](https://github.com/rockbenben/scene-anchor/releases) 下载对应平台的文件：**Windows** 是 `.exe` 安装包（也提供 `.zip`）；**macOS** 是 `.pkg` 安装包；**Linux** 是 `.deb`（`sudo apt install ./scene-anchor-*.deb`）。
 
-**Windows：双击 `.exe` 就装完了。** 默认装进 `C:\ProgramData\obs-studio\plugins\`——这是 OBS 在 Windows 上除自身安装目录外唯一会扫描的插件目录，也是 OBS 更新时不会被清掉的那个。你也可以在安装向导里改指到 OBS 目录（便携版，或 `C:\Program Files\obs-studio`），它会按**那个**位置要求的结构摆放文件；两种布局不同，安装包按你选的目录自动挑对的一套。在两者之间改装时还会清掉旧位置的副本，避免 OBS 把插件加载两次。两个目标都是全机范围的目录，所以会要一次管理员权限。想卸载在「设置 → 应用」里能找到。安装包未做代码签名，Windows SmartScreen 会拦一下（*「Windows 已保护你的电脑」*），点**详细信息 → 仍要运行**即可。
+**这个分支只支持 OBS 33+。** 当前已发布的最新版仍是 1.0.1（OBS 32）；下一个版本 2.0.0 改用 OBS 33 的插件目录。OBS 32 用户请留在 1.0.1。
 
-**Windows 手动装（`.zip`）：解压后把整个 `scene-anchor` 文件夹搬进 `C:\ProgramData\obs-studio\plugins\`。** 不要拆开 `bin` 和 `data`——压缩包里本来就是 OBS 认的目录结构。把 `%ProgramData%\obs-studio\plugins` 粘进资源管理器地址栏就能到，没有 `plugins` 目录就新建一个。结果跟安装包装出来的一样：
+**Windows：双击 `.exe` 就装完了。** 默认装进 `C:\ProgramData\obs-studio\plugins\`——这是 OBS 33 在 Windows 上给常规安装读取的全机插件目录，也是 OBS 更新时不会被清掉的那个。**便携版**请在安装向导里把目标指向含 `bin\64bit\obs64.exe` 的 OBS 根目录，它会改装到 `<OBS>\plugins\scene-anchor\`。安装包按你选的目录挑布局，并在两者之间切换时清掉旧位置的副本，避免 OBS 把插件加载两次。两个目标都是全机范围的目录，所以会要一次管理员权限。想卸载在「设置 → 应用」里能找到。安装包未做代码签名，Windows SmartScreen 会拦一下（*「Windows 已保护你的电脑」*），点**详细信息 → 仍要运行**即可。
+
+**Windows 手动装（`.zip`）：解压后把整个 `scene-anchor` 文件夹搬进 `C:\ProgramData\obs-studio\plugins\`。** 保持文件夹完整——压缩包里本来就是 OBS 33 认的目录结构。把 `%ProgramData%\obs-studio\plugins` 粘进资源管理器地址栏就能到，没有 `plugins` 目录就新建一个。结果跟安装包装出来的一样：
 
 ```
-C:\ProgramData\obs-studio\plugins\scene-anchor\bin\64bit\scene-anchor.dll
+C:\ProgramData\obs-studio\plugins\scene-anchor\scene-anchor.dll
 C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
 ```
 
 注意是 `ProgramData`，不是 `%APPDATA%`——Windows 上 OBS 只读全机范围的那个目录，放到 `AppData\Roaming` 下的副本会被静默忽略、永远不加载。
 
-**装进 OBS 目录（便携版必须这样装）：**那边是另一套布局，两个文件夹**要**拆开——`bin\64bit\*` 放进 `<OBS>\obs-plugins\64bit\`，`data\` 的**内容**放进 `<OBS>\data\obs-plugins\scene-anchor\`。`<OBS>` 是你的便携版目录，或者常规安装的 `C:\Program Files\obs-studio`。不想手动摆的话，安装包也覆盖这种情况——在选择目标位置那一页把路径指到 `<OBS>` 即可。
+**装进便携版 OBS 目录：**把压缩包解到 `<OBS>\plugins\`，结果是 `<OBS>\plugins\scene-anchor\scene-anchor.dll` 加 `<OBS>\plugins\scene-anchor\data\...`。`<OBS>` 是含 `bin\64bit\obs64.exe` 和 `portable_mode.txt` 的根目录。常规（非便携）安装必须用 ProgramData；`<OBS>\plugins` 只在便携模式下读取。不想手动摆的话，安装包也覆盖这种情况——在选择目标位置那一页把路径指到 `<OBS>` 即可。
 
 以上几种装法装完都要重启 OBS。
 
@@ -79,7 +81,7 @@ C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
 - **删除一个被别的场景嵌套引用的场景**（即它被当作另一个场景里的一个来源）：撤销会恢复该场景及其子源，但**不会**恢复它在引用它的父场景中的摆放条目。OBS 自己的删除路径用 `scene_used_in_other_scenes` + `RemoveSceneAndReleaseNested` 处理这种情况，SceneAnchor 没有实现对应机制。这是写明并接受的缺口，不是疏漏。
 - **只管主画布。** 属于副画布的场景——Aitum Vertical 的竖屏画布，或任何别的插件用 `obs_frontend_add_canvas` 建的画布——一概不出现在本面板里。它们在那个画布自己的面板里切换，那里也是它们该在的地方。
 
-  这是一个决定，不是缺失的功能。OBS 32 没有「设置某画布当前场景」的 API：frontend 层只有 `get_canvases` / `add_canvas` / `remove_canvas`，再无其他。唯一看着通用的 `obs_canvas_set_channel(canvas, 0, scene)`，OBS 自己的前端从不调用——libobs 只在 `obs_set_output_source` 内部用它，且只对主画布——而拥有画布的插件通常在 channel 0 上挂的是**转场源**而不是场景。往那里写场景会顶掉转场、画面硬切，并让那个插件记录的当前场景与屏幕上的实际画面失同步。所谓「通用实现」实为主动破坏。
+  这是一个决定，不是缺失的功能。OBS 33 仍然没有「设置某画布当前场景」的 API：frontend 层只有 `get_canvases` / `add_canvas` / `remove_canvas`，再无其他。唯一看着通用的 `obs_canvas_set_channel(canvas, 0, scene)`，OBS 自己的前端从不调用——libobs 只在 `obs_set_output_source` 内部用它，且只对主画布——而拥有画布的插件通常在 channel 0 上挂的是**转场源**而不是场景。往那里写场景会顶掉转场、画面硬切，并让那个插件记录的当前场景与屏幕上的实际画面失同步。所谓「通用实现」实为主动破坏。
 
   个别插件确实提供了自己的切换口子（Aitum Vertical ≥1.6.1 在全局 proc handler 上注册了 `aitum_vertical_switch_scene`）。支持这一家而不支持下一家既不公平也难维护；而一个本面板切不了的场景，只占得住三个动词里的两个——找到、整理、切换。两个不足以换一个 UI 分区。
 - **切换「在多视图中显示」不会立刻刷新已打开的多视图投影。** 改动要等下一次树重建才生效（没有公开 API 能强制刷新多视图）。
@@ -89,15 +91,13 @@ C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
 
 **灰色地带**：转场覆盖存在 `"transition"` / `"transition_duration"` 这两个 private-settings 键下，多视图可见性存在 `"show_in_multiview"` 下。这些键可以通过公开 API 读写，但键名本身是 OBS 前端的约定而非有文档的 API 契约——未来某个 OBS 版本可能不打招呼就改掉。
 
-- **只有 Windows 经过真机验证。**[`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) 里的每一项人工检查——拖拽、撤销/重做、删除撤销、主题、本地化——都是在 Windows 上对着 OBS 32.0.2 与 32.2.2 跑的。macOS 与 Linux 目标能在 CI 上编译打包，插件本身也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过。请把它们当作**未验证**而不是**有问题**，遇到什么也欢迎报给我。
-
-**外观上的、原因不明的一处**：在 OBS 32.2（Qt 6.11）上拖动面板时，日志里会出现一条 `QWidgetWindow(… name="scene_anchor_dockWindow") must be a top level window.` 警告。OBS 32.0（Qt 6.8）上没有。本插件没有任何地方创建或操作 `QWindow`——面板部件是被 OBS 自己的 `OBSDock` 包起来的——而且面板行为正常。记在这里，而不是隐去不提。
+- **只有 Windows 经过真机验证。**[`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) 里的完整人工检查——拖拽、撤销/重做、删除撤销、主题、本地化——是在 Windows 上对着 OBS 32.2.2 跑的。OBS 33.0.x 构建已跑过加载、面板、搜索与切换，以及 MRU 顺序、单击延迟模式、集合复制/切换/重命名 + 强杀、热键搜索流程和关闭日志；其余项尚未在 OBS 33 上重跑。macOS 与 Linux 目标能在 CI 上编译打包，插件本身也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过。请把它们当作**未验证**而不是**有问题**，遇到什么也欢迎报给我。
 
 ## 报告问题
 
 问题请提到 [GitHub Issues](https://github.com/rockbenben/scene-anchor/issues)。四样东西决定一份报告能不能被查下去：
 
-- **OBS 版本、平台，以及插件版本。**最后这项插件加载时会自己打进日志：`[scene-anchor] plugin loaded successfully (version 1.0.0)`。
+- **OBS 版本、平台，以及插件版本。**最后这项插件加载时会自己打进日志：`[scene-anchor] plugin loaded successfully (version 1.0.1)`。
 - **那一次运行的日志。**帮助 → 日志文件 → 上传当前日志文件会生成一个可分享的链接；本插件写的每一行都带 `[scene-anchor]` 前缀。
 - **你做了什么、预期什么、实际发生了什么**——以及是否涉及撤销或重做，那是本插件风险最高的代码路径。
 - **如果文件夹丢了，把场景集合本身附上**（场景集合 → 导出场景集合）。树就存在那个文件里，它本身就是证据；缺了它的「文件夹丢失」报告基本无法定位。
@@ -118,9 +118,9 @@ C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
 
 ## 构建
 
-需要 [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate) 工具链（CMake presets、由 `buildspec.json` 钉住的 obs-deps 与 Qt6）。只支持 OBS Studio 32+。
+需要 [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate) 工具链（CMake presets、由 `buildspec.json` 钉住的 obs-deps 与 Qt6）。只支持 OBS Studio 33+。
 
-**钉住的依赖刻意取支持范围里最旧的那一档**（obs-studio 32.0.2、Qt 6.8.3），不是最新的。Qt 的二进制兼容是单向的：对 6.8 编译的插件能在 6.9/6.10/6.11 上加载，对 6.11 编译的则无法在 6.8 上加载。OBS 32.2 带的是 Qt 6.11，对着它编译会悄无声息地丢掉所有 OBS 32.0 和 32.1 用户。libobs 同理——对着 32.0.2 的头文件编译，才能保证只调用整个支持范围内都存在的 API。除非某个功能确实需要更新的 API，否则不要抬高这些钉子。
+**钉住的依赖取支持范围里最旧的那一档**（obs-studio 33.0.0，Qt 6.11.1，来自 obs-deps 2026-10-23），不是最新的。对着 33.0.0 的头文件编译，才能保证只调用整个 OBS 33.x 都存在的 API；Qt 6.11.1 是 OBS 33.0 自带的 Qt，所以插件能在 OBS 33 的运行时里加载。除非支持范围移动或某个功能确实需要更新的 API，否则不要抬高这些钉子。
 
 ```bash
 # Windows x64
@@ -136,12 +136,20 @@ cmake --preset ubuntu-x86_64
 cmake --build --preset ubuntu-x86_64 --config RelWithDebInfo
 ```
 
-单元测试（不需要 OBS 运行时，直接链接 libobs）：
+单元测试（不需要 OBS 运行时；测试本身只链接 Qt，用假 OBS 桩）：
 
 ```bash
 cmake -S tests -B build_tests -G Ninja
 cmake --build build_tests
 ctest --test-dir build_tests --output-on-failure
+```
+
+实时基准（不进 ctest）：用假 OBS 桩装真的 dock，铺 600 个场景，打印平均 `rebuild` 与切场景耗时。`BENCH_NO_MRU=1`、`BENCH_NO_ICONS=1` 可分别摘掉 MRU 条与图标开销，便于把回归归因到具体一段：
+
+```bash
+cmake --build build_tests --target bench_dock
+./build_tests/bench_dock
+BENCH_NO_MRU=1 ./build_tests/bench_dock
 ```
 
 ## 设计说明

@@ -1,8 +1,8 @@
 # SceneAnchor 设计规格
 
 日期：2026-08-17
-状态：已实现并在 **Windows 真机**的 OBS 32.0.2 / 32.2.2 上验证，含拖拽、撤销/重做、删除撤销三条交互路径（见 docs/pre-release-checklist.md）。macOS 与 Linux 只有 CI 构建，从未真机运行过，见 §8
-最后更新：2026-08-19
+状态：已实现并在 **Windows 真机**的 OBS 33.0.x 上跑了加载/面板/搜索/切换、MRU 顺序、单击延迟模式与关闭日志；完整交互清单（拖拽、撤销/重做、删除撤销）在 OBS 32.2.2 上验证，尚未在 33 上重跑。macOS 与 Linux 只有 CI 构建，从未真机运行过，见 §8
+最后更新：2026-10-31
 仓库名与模块名：`scene-anchor`。**刻意不加 `obs-` 前缀**——obs-plugintemplate wiki 明确不建议
 模仿 obs-studio 内部模块的命名（`obs-x264`、`obs-filters` 一类），理由是用户难以分辨哪些是
 第三方插件、哪些是 OBS 自带功能。名称同样不含 tree；tree/folder 等发现性关键词放仓库描述、
@@ -22,10 +22,10 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 
 ## 2. 范围（一次性全部实现，不分期）
 
-**包含**：文件夹树（无限嵌套）、多选拖拽、搜索实时过滤、颜色标签（8 预设 + 自定义，按背景自适应对比度）、MRU 最近场景条（数量随宽度自适应）、完整右键菜单、双击行为可配、选中是否切换/MRU 显隐/图标显隐三个开关、树操作 undo/redo、场景删除 undo、三平台 CI。
+**包含**：文件夹树（无限嵌套）、多选拖拽、搜索实时过滤、颜色标签（8 预设 + 自定义，按背景自适应对比度）、MRU 最近场景条（数量随宽度自适应）、完整右键菜单、双击行为可配、点击/方向键是否切换/MRU 显隐/图标显隐三个开关、树操作 undo/redo、场景删除 undo、三平台 CI。
 
 **不做**（决定过，非延期）：
-- **副画布场景一概不进树**（2026-08-18 决定，推翻了早先「显示但不可切换」的做法）。OBS 32 没有「设置某画布当前场景」的 API，frontend 层只有 `get_canvases`/`add_canvas`/`remove_canvas`。看似通用的 `obs_canvas_set_channel(cv, 0, scene)` 不可用：OBS 前端自身从不调它（libobs 唯一调用点是 `obs_set_output_source` 内部、仅对主画布，`obs.c:1815`），且建画布的插件通常在 channel 0 上挂**转场源而非场景**（Aitum Vertical 的 `CanvasDock::SwitchScene`），写进去等于顶掉转场槽位、画面硬切、令对方记录的当前场景与实际画面失同步——「通用支持」实为主动破坏。个别厂商确有自己的口子（Aitum ≥1.6.1 的 `aitum_vertical_switch_scene` 全局 proc），但逐厂适配做一不做二既不公平也难维护。判据是这个 dock 的三个动词：找到、整理、切换；切不了的场景只占两个，不足以换一个 UI 分区。副画布场景在它自己的 dock 里切换，那里也是它们该在的地方。README 声明。
+- **副画布场景一概不进树**（2026-08-18 决定，推翻了早先「显示但不可切换」的做法）。OBS 33 仍然没有「设置某画布当前场景」的 API，frontend 层只有 `get_canvases`/`add_canvas`/`remove_canvas`。看似通用的 `obs_canvas_set_channel(cv, 0, scene)` 不可用：OBS 前端自身从不调它（libobs 唯一调用点是 `obs_set_output_source` 内部、仅对主画布），且建画布的插件通常在 channel 0 上挂**转场源而非场景**（Aitum Vertical 的 `CanvasDock::SwitchScene`），写进去等于顶掉转场槽位、画面硬切、令对方记录的当前场景与实际画面失同步——「通用支持」实为主动破坏。个别厂商确有自己的口子（Aitum ≥1.6.1 的 `aitum_vertical_switch_scene` 全局 proc），但逐厂适配做一不做二既不公平也难维护。判据是这个 dock 的三个动词：找到、整理、切换；切不了的场景只占两个，不足以换一个 UI 分区。副画布场景在它自己的 dock 里切换，那里也是它们该在的地方。README 声明。
 - 同步真实顺序回原生 Scenes dock——无公开 API，做了就回到私有依赖老路。
 - 从旧插件迁移导入、文件夹级热键、场景缩略图、树导出——未选入。
 
@@ -68,7 +68,7 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 - store 只记录用户主动放置过的条目。未放置的场景 → 重建时按 OBS 原始顺序追加在树底部「未归类」尾区（纯视图层，不写入 store）。拖进文件夹的那一刻才进 store。这一段现在有一条不可选、不可编辑、但能作为放置目标的表头行（`RowPlan::Header`，文案 `SceneAnchor.UnfiledHeader`）标出「哪些还没整理」——此前它与文件夹外的场景行同缩进同图标，唯一的区别是位置，用户扫不出来。
 - 场景引用**以 UUID 为主键、场景名为回退解析器**（`uuid` + `name` 两个字段都存）。改名因此是零成本事件（uuid 存活，永不走回退）。
 
-  **为什么必须有回退**：OBS 32.0.2 复制场景集合时（`SetupDuplicateSceneCollection`，`frontend/widgets/OBSBasic_SceneCollections.cpp:159-205`）会对 `sources` 数组逐项执行 `obs_data_set_string(data, "uuid", os_generate_uuid())` —— **每个场景都换新 uuid**。而 `modules` blob 随文件整份拷贝、内容不被触碰。若只认 uuid，复制后整棵树的场景全部变僵尸被清除，本文档 §1 差异点 1 的旗舰主张即为假。
+  **为什么必须有回退**：OBS 33.0.0 复制场景集合时（`SetupDuplicateSceneCollection`，`frontend/widgets/OBSBasic_SceneCollections.cpp`）会对 `sources` 数组逐项执行 `obs_data_set_string(data, "uuid", os_generate_uuid())` —— **每个场景都换新 uuid**。而 `modules` blob 随文件整份拷贝、内容不被触碰。若只认 uuid，复制后整棵树的场景全部变僵尸被清除，本文档 §1 差异点 1 的旗舰主张即为假。
   对照：`SetupRenameSceneCollection`（:207-240）只改文件名与 name 字段，uuid 保留；canvases 存于独立的 `"canvases"` 数组（:869/:1175），复制时不重生 —— 故 canvas 键无需回退。
 
   **为什么名字是可靠回退而非启发式**：OBS 强制 source 名全局唯一，且复制集合时名字逐字保留，映射是精确的。名字仅在 uuid 未命中时使用，不会重新引入竞品那类"改名断链"（竞品败因是以名字为主键、且存在以集合名索引的侧文件里）。
@@ -85,7 +85,7 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 | 键 | 默认 | 含义 |
 |---|---|---|
 | `DoubleClick` | `transition` | 双击行为：`transition` / `rename` / `none` |
-| `SelectSwitches` | `true` | 选中（含方向键移动选中）是否切换场景 |
+| `SelectSwitches` | `true` | 点击松手、方向键选中是否切换场景；右键和拖动整理不切换 |
 | `ShowMru` | `true` | 是否显示最近使用条 |
 | `SceneIcons` | `true` | 是否显示行图标，**文件夹与场景一起管**（键名是第一版留下的，改名会丢用户已落盘的设置）|
 
@@ -95,26 +95,29 @@ OBS 场景文件夹树 dock。与 DigitOtter/obs_scene_tree_view、TheThirdRail/
 
 任何变动（OBS 事件 / 用户操作 / undo）→ 全量重建视图：
 
-1. `obs_frontend_get_canvases` → 每 canvas `obs_canvas_enum_scenes` 得 (uuid, name) 活跃集
+1. `obs_get_main_canvas()` 取主画布 uuid；`obs_frontend_get_scenes` 取场景，按 `obs_source_get_canvas` 过滤掉副画布（未挂画布视同主画布），得 (uuid, name) 活跃集
 2. 走 store 树：folder → 建节点；scene-uuid ∈ 活跃集 → 建节点（名字取实时值）标记已消费；∉ → 跳过（store 保留）
 3. 活跃集未消费残余 → 未归类尾区（有残余时先插一条 `Header` 表头行）
-4. 恢复展开态（store）、选中（按 UUID）、滚动位置；高亮当前场景
+4. 恢复展开态（store，逐文件夹设开/关，不先整树 collapse）、选中（按 UUID）、滚动位置；高亮当前场景
 
-O(n)，n ≤ 数百。单 canvas 时不显示 canvas 分组层。自发操作用布尔重入锁挡事件重建（如建场景：create → 拿 uuid → store 插入 → 重建）。
+O(n)，n 为场景数（基准按 600 跑）。单 canvas 时不显示 canvas 分组层。自发操作用布尔重入锁挡事件重建（如建场景：create → 拿 uuid → store 插入 → 重建）。
+
+实时路径不重跑整棵树：rebuild 时建 uuid→item 索引，program/preview 切换只改旧/新两行的字体；MRU 条只对最近 ≤5 个 uuid 调 `obs_get_source_by_uuid` 取名（并校验主画布），不再为它枚举全部场景或重建全部 chip。基准与归因开关见 §9。
 
 ## 6. 交互
 
 | 交互 | 实现 |
 |---|---|
-| 双击 | 可配：转场（默认）/ 重命名 / 无。Studio 模式单击设预览 |
-| 搜索 | `QSortFilterProxyModel` + `setRecursiveFilteringEnabled(true)`；非空全展开，清空恢复 store 展开态。树下面有一行状态：搜不到东西时说「没有匹配 · 按 Esc 清空」（此前是一片空白，看起来像插件坏了），有结果时说「搜索中不能拖动整理」（禁拖是有意的，见下条，但界面上以前完全没交代）。判断有无结果走 `indexBelow` 的**可见顺序**，折叠文件夹里的命中项不算有结果 |
-| MRU | 监听 `SCENE_CHANGED` 头插去重，上限 5，树上方 chips，点击即切，不参与拖拽。**画几枚、每枚多宽由 dock 宽度算出**：先试「每一枚都放得下全名」的最大数量，试不出才退到「省略后至少还剩 48px」；再都不行就画一枚，剩下的进末尾的「⋯」菜单——挤掉的东西必须在界面上有出口，不能只留在日志那句 `dropped for width` 里。省略取 ElideMiddle：OBS 场景名普遍带类别前缀，从尾部截会让多个 chip 长得一模一样。**条高不随宽度变**：取不受宽度约束时的 chip 高度——被压窄的按钮 `sizeHint` 会变高，拿它定条高会让整棵树随 dock 宽度上下爬（量具实测 36 vs 24） |
+| 双击 | 可配：转场（默认）/ 重命名 / 无。Studio 模式单击设预览。双击行为为「无」时没有第二击要保护，单击立即切换；另两种模式仍等过一个系统双击间隔 |
+| 搜索 | `QSortFilterProxyModel` + `setRecursiveFilteringEnabled(true)`；非空全展开，清空恢复 store 展开态。树下面有一行状态：搜不到东西时说「没有匹配 · 按 Esc 清空」（此前是一片空白，看起来像插件坏了），有结果时说「搜索中不能拖动或新建」（禁拖、禁新建都是有意的，见下条，但界面上以前完全没交代）。判断有无结果走 `indexBelow` 的**可见顺序**，文件夹行也算结果；无文件夹时的空状态提示在过滤期间隐藏（它会指向已被禁用的新建按钮），清空后回来。 |
+| MRU | 监听 `SCENE_CHANGED` 头插去重，上限 5，树上方 chips，点击即切，不参与拖拽。**画几枚、每枚多宽由 dock 宽度算出**：先试「每一枚都放得下全名」的最大数量，试不出才退到「省略后至少还剩 48px」；再都不行就画一枚，剩下的进末尾的「⋯」菜单——挤掉的东西必须在界面上有出口，不能只留在日志那句 `dropped for width` 里。省略取 ElideMiddle：OBS 场景名普遍带类别前缀，从尾部截会让多个 chip 长得一模一样。**条高不随宽度变**：取不受宽度约束时的 chip 高度——被压窄的按钮 `sizeHint` 会变高，拿它定条高会让整棵树随 dock 宽度上下爬（量具实测 36 vs 24）。名字按 uuid 现查（最多 5 个），不依赖全场景枚举 |
 | 多选拖拽 | `ExtendedSelection`；drop 按序插入（修复旧插件 row 不递增 bug） |
 | 颜色 | 8 个预设 + 自定义（QColorDialog）+ 清除，folder/scene 通用。**呈现方式：给该行已有的图标染色**，不新增视觉元素；绘制前按**这一行的色真会落在的两块背景**（树底 `Base` 与选中高亮条 `Highlight`）把明度调到 WCAG 图形门槛 3:1（色相饱和度不动），故存的是用户原色、画的是可读版本。关掉图标后同一支色当**文字**用，按正文门槛 4.5:1 再解一次。菜单里当前色以描边环标示——带图标的 QAction 其勾选标记会被图标盖掉 |
 | 删除场景 | 确认对话框 → `obs_source_remove`，注册 undo |
+| 新建文件夹 | 插入后立即选中并进入行内改名（与新建场景先要名字同一节奏）；连续创建不会再得到一排同名「新文件夹」 |
 | 图标 | 自带 SVG（folder/scene/plus/minus 各深浅两套）。**深浅判定不用 `obs_frontend_is_theme_dark()`**：它返回的是解析自主题文件 `dark:` 键的 `OBSTheme::isDark`，System 主题没有该键、成员未初始化，返回值不可信。改问树视图实际画在什么背景上：`view_->palette().color(QPalette::Base).lightness() < 128` |
 
-**右键菜单**（全公开 API）：转场到此场景 / 重命名（右侧标 `F2`，只显字不注册 QAction 快捷键——注册会抢 OBS 的全局键）/ 创建副本 / 删除场景（后果与可逆性写在 tooltip）/ **滤镜 ▸**（复制、粘贴、打开滤镜窗口；粘贴灰着时 tooltip 说明要先复制）/ **投影 ▸**（窗口投影、全屏投影 → `QGuiApplication::screens` 枚举显示器，报**物理**分辨率并按 `devicePixelRatio` 换算，Qt 6.8 还没有 `QScreen::physicalGeometry()`）/ 截屏（`obs_frontend_take_source_screenshot`）/ 转场覆盖（子菜单含「时长」标签 + SpinBox）/ 多画面显隐 / 颜色子菜单。文件夹项：新建子文件夹 / **在此文件夹新建场景**（与底部 ＋ 按钮同一条 `createSceneInFolder`）/ 重命名 / 颜色 / 解散（子项上移）/ 删除（含场景则确认）。滤镜与投影各自收一层，是因为这层菜单此前有 18 行、比 dock 本身还高，一屏放不下。
+**右键菜单**（全公开 API）：转场到此场景 / 重命名（右侧标 `F2`，只显字不注册 QAction 快捷键——注册会抢 OBS 的全局键）/ 创建副本 / 删除场景（后果与可逆性写在 tooltip）/ **滤镜 ▸**（复制、粘贴、打开滤镜窗口；粘贴灰着时 tooltip 说明要先复制）/ **投影 ▸**（窗口投影、全屏投影 → `QGuiApplication::screens` 枚举显示器，报**物理**分辨率并按 `devicePixelRatio` 换算，Qt 6.11 仍没有 `QScreen::physicalGeometry()`）/ 截屏（`obs_frontend_take_source_screenshot`）/ 转场覆盖（子菜单含「时长」标签 + SpinBox）/ 多画面显隐 / 颜色子菜单。文件夹项：新建子文件夹 / **在此文件夹新建场景**（与底部 ＋ 按钮同一条 `createSceneInFolder`）/ 重命名 / 颜色 / 解散（子项上移）/ 删除（含场景则确认）。滤镜与投影各自收一层，是因为这层菜单此前有 18 行、比 dock 本身还高，一屏放不下。
 
 **Undo/Redo**（`obs_frontend_add_undo_redo_action`）：
 - 树操作（移动/建删改文件夹/颜色）：undo_data = 操作前树 JSON 串，回调反序列化+重建，单一路径无特例
@@ -154,18 +157,23 @@ O(n)，n ≤ 数百。单 canvas 时不显示 canvas 分组层。自发操作用
 
 ## 8. 平台与 CI
 
-obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / macOS universal `.pkg` / Linux `.deb`（另出 `-dbgsym.ddeb` 与一份源码 `source.tar.xz`）——**Linux 没有 tar.gz**，早先这里写的 `deb+tar.gz` 是照抄模板文档、未经核对。`buildspec.json` 锁 obs-deps 与 Qt 版本。仅 OBS 32+。本地开发 Windows，三平台走 GitHub Actions。
+obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / macOS universal `.pkg` / Linux `.deb`（另出 `-dbgsym.ddeb` 与一份源码 `source.tar.xz`）——**Linux 没有 tar.gz**，早先这里写的 `deb+tar.gz` 是照抄模板文档、未经核对。`buildspec.json` 锁 obs-deps 与 Qt 版本。**仅 OBS 33+**，Windows 安装包按 OBS 33 的新插件布局（`<plugins>/<module>/<module>.dll + data`）分发；OBS 32 用户留在 1.0.1。本地开发 Windows，三平台走 GitHub Actions。
 
-**pin 策略：锁最老的受支持目标，不锁最新。** 当前 obs-studio 32.0.2 + Qt 6.8.3。Qt 的二进制兼容是单向的——6.8 编的能在 6.9/6.10/6.11 运行时上加载，6.11 编的无法在 6.8 上加载。OBS 32.2 已换 Qt 6.11，若跟着升 pin，等于静默放弃全部 32.0 与 32.1 用户。libobs 同理：按 32.0.2 头文件编译，保证只调用整个受支持区间都存在的 API。仅当确需 32.1+ 才有的 API 时才抬 pin。已在 OBS 32.0.2 与 32.2.2 上分别验证加载与运行——**两次都在 Windows 上**。macOS 与 Linux 目标能在 CI 上编译打包，插件也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过；README 的「已知限制」里如实声明了这一点，别在发布材料里把「三平台出包」写成「三平台验证过」。
+**pin 策略：锁最老的受支持目标，不锁最新。** 当前 obs-studio 33.0.0 + Qt 6.11.1（obs-deps 2026-10-23）。对着 33.0.0 头文件编译，保证只调用整个 OBS 33.x 都存在的 API；Qt 6.11.1 是 OBS 33.0 自带的 Qt，插件因此能在 OBS 33 的运行时里加载。仅当支持范围移动或确需更新 API 时才抬 pin。OBS 33.0.x 在 Windows 上跑过加载/面板/搜索/切换、MRU 顺序、单击延迟模式、集合复制/切换/重命名 + 强杀、热键搜索流程与关闭日志；完整交互清单仍是 OBS 32.2.2 的结果。macOS 与 Linux 目标能在 CI 上编译打包，插件也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过；README 的「已知限制」里如实声明了这一点，别在发布材料里把「三平台出包」写成「三平台验证过」。
 
-**插件清单 `manifest.json` 由 CMake 生成，不是静态文件。** OBS 32 的 `obs_module_load_metadata` 会读插件 data 目录下的这个文件；`display_name` 一旦存在就**压过** C 导出的 `obs_module_name()`，所以品牌名在这里定死为英文，界面里那个可本地化的名字由 dock 标题承担。名字、id、版本、网址全部从 `buildspec.json` 取，发版时不会漏改一处。完整取舍写在 `CMakeLists.txt` 生成它的那几行上方，此处不复述。
+**插件清单 `manifest.json` 由 CMake 生成，不是静态文件。** OBS 33 的 `obs_module_load_metadata` 会读插件 data 目录下的这个文件；`display_name` 一旦存在就**压过** C 导出的 `obs_module_name()`，所以品牌名在这里定死为英文，界面里那个可本地化的名字由 dock 标题承担。名字、id、版本、网址全部从 `buildspec.json` 取，发版时不会漏改一处。完整取舍写在 `CMakeLists.txt` 生成它的那几行上方，此处不复述。
+
+**OBS 33 新增公开 API 的取舍。** 对 dock 真正适用的很少：`obs_frontend_is_safe_mode_enabled()` 只对 first-party 插件有意义（第三方插件在安全模式根本不加载）；`obs_source_get_dark_icon`/`light_icon` 是 source 类型图标、`obs_frontend_copy_sceneitem` 是 scene item 剪贴板、`obs_canvas_video_active` 是画布输出状态、replay buffer 事件属回放缓冲——本 dock 没有对应界面，未接入。实际采用的是 `obs_module_unload` 的寿命约定：OBS 33 在 `OBS_FRONTEND_EVENT_EXIT` 之后立即销毁 frontend callbacks，因此 bridge 收到 EXIT 时停掉 2 秒保存定时器并置 `frontendAlive_ = false`；析构只做 libobs 侧的热键/信号清理，不再调用 `obs_frontend_remove_*`。正常退出前的 `saveAll()` 已把集合与热键落盘。真机日志里 OBS 自身的 SourceTreeModel、obs-websocket 仍可能各打一条 `with no callbacks`，不能算到插件头上。
 
 ## 9. 测试
 
-- **单元**：`test_tree_store` 只链 `Qt6::Core`——不链 libobs，也不链 Qt Widgets，因而在任何装了 Qt 的机器上都能跑。覆盖两块——
+- **单元**：`test_tree_store` 只链 `Qt6::Core`——不链 libobs，也不链 Qt Widgets，因而在任何装了 Qt 的机器上都能跑。覆盖三块——
   - `TreeStore`：序列化往返、load 清僵尸、会话内保僵尸、多选移动顺序、版本护栏原样写回、未归类不入 store
   - `planProjection`：僵尸跳过、未归类追加在尾、**表头只在「有未归类」且「调用方给了文案」时出现**（两者缺一就不该凭空多一条空标题）、名字取实时值、外来版本全平铺、畸形数据里重复 uuid 只渲染一行，以及**内容恒从 depth 0 起**——这一条锁的是「副画布不进树」在投影侧的表现：不因画布这个概念多出任何一行、也不多缩进一级
+  - `readableOn`：八个预设色在深/浅两套背景、普通行/选中行两块上的图形 3:1 与文字 4.5:1 门槛，外加贴近背景的自定义色（`#101020` / `#FDFDD0`）与色相保持
+- **UI 回归** `test_dock_ui`：真的 `TreeDock` + fake OBS，覆盖搜索状态、提示显隐、新建禁用、清空搜索后的折叠态、切换只改旧/新两行、`none` 模式单击立即切换，以及 MRU 按 uuid 取名
 - **UI 量具** `tests/ux_probe.cpp`（`EXCLUDE_FROM_ALL`，不进 ctest）：离屏构造各部件，量 `minimumSizeHint` 与真实布局结果，用于回答"这个 dock 能被拖到多窄"这类问题。MRU 顶死 dock 最小宽度那个缺陷就是它量出来的
+- **实时基准** `tests/bench_dock.cpp`（`EXCLUDE_FROM_ALL`，不进 ctest）：600 场景下打印平均 rebuild 与切场景耗时；`BENCH_NO_MRU` / `BENCH_NO_ICONS` 分别摘掉 MRU 与图标开销，便于归因
 - **手动清单**（发布前）：复制集合 / 切换集合 / 重命名集合 / 强杀 OBS 四杀手场景 + Studio 模式 + 主题明暗切换
 
 ## 10. 生存风险声明
@@ -178,7 +186,7 @@ obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / m
 
 | 字段 | 值 |
 |---|---|
-| GitHub description | `OBS 32 scene folders that survive collection copies and renames ｜ OBS 32 场景文件夹，复制改名集合都不丢` |
+| GitHub description | `OBS scene folders that survive collection copies and renames ｜ OBS 场景文件夹，复制改名集合都不丢` |
 | homepage | `https://github.com/rockbenben/scene-anchor/releases`，论坛资源页上线后换成资源页 |
 | topics | `obs-studio` `obs-plugin` `scene-organizer` `scene-tree` `folders` `streaming` `windows` `macos` `linux` |
 | 社交预览图 | `assets/social-card.png`（1280×640），Settings → Social preview 上传 |
@@ -206,12 +214,12 @@ obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / m
 - **隔离配置用 `--portable`，但 portable 的配置根是相对工作目录的**（`../../config`）。
   所以工作目录要摆成 `<scratch>/bin/64bit`，并给 `<scratch>/data` 建一个指向安装目录的 junction，
   否则报 "Failed to find local data files"。
-- **`<scratch>/obs-plugins/64bit` 反过来要自己建、只放需要的 DLL**。它同样按工作目录解析，
-  于是可以只留 `rtmp-services.dll`（少了它起不来：service 与编码器都在插件里）。
-  用户装的那些会弹窗的第三方插件因此不会被加载，也不用动 Program Files。
-- 插件本体走 `OBS_PLUGINS_PATH` + `OBS_PLUGINS_DATA_PATH` 指向 `build_x64/rundir/RelWithDebInfo`
-  （两者同一个目录：OBS 自己往数据路径后拼 `/%module%`）。portable 模式会跳过
-  `%PROGRAMDATA%\obs-studio\plugins` 那条搜索路径，正好避开上一次装的旧版。
+- **OBS 33 的便携包已经把核心模块放在 `<scratch>/core/`、资源放在 `<scratch>/data/`**，
+  直接解官方 portable zip 即可；它不带用户装在 Program Files 里的第三方插件。
+  测发布布局时把插件放进 `<scratch>/plugins/scene-anchor/`，与 OBS 33 的正式目录一致。
+- 开发时也可以走 `OBS_PLUGINS_PATH` + `OBS_PLUGINS_DATA_PATH` 指向
+  `build_x64/rundir/RelWithDebInfo`（两者同一个目录：OBS 自己往数据路径后拼 `/%module%`）。
+  portable 模式会跳过 `%PROGRAMDATA%\obs-studio\plugins` 那条搜索路径，正好避开上一次装的旧版。
 - **界面语言是 `user.ini` 的 `[General] Language`**，不是 `global.ini` 的 `Locale`——后者写了不生效。
   图标开关（`SceneIcons`）和停靠布局同样在 `user.ini` 里，改完要等 OBS 正常退出（强杀会写出
   崩溃哨兵，下次启动弹安全模式，而安全模式会禁用第三方插件，也就是我们自己）。
@@ -249,5 +257,5 @@ This means that a plugin must have the source code available in compliance with 
 是因为主语换成「文件夹」后更贴近用户实际担心的东西——他担心的不是「场景」跑掉，是自己整理的
 那层结构没了。**不写「最强 / 最好用的场景树插件」这类无法证伪的话。**
 
-README 首屏那句一句话（`Folder tree for the OBS 32 scene list — …`）与 slogan 分工不同：
+README 首屏那句一句话（`Folder tree for the OBS scene list — …`）与 slogan 分工不同：
 slogan 管气质，一句话管事实与检索词，两者不互相复述。改动其一时回头看另一处是否还成立。
