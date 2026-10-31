@@ -7,27 +7,31 @@
   `v1.0.2` 会被 CI 直接拒绝并提示正确写法。
 - **tag 必须等于 `buildspec.json` 的 `version`。** `check-event` 在构建前比较两者，
   不一致就失败，避免 `1.0.2` 的 tag 发出 `1.0.1` 的文件。
-- **OBS 32 兼容的最后一版是 `1.0.1`。** 从下一个版本起只支持 OBS 33+、只发 OBS 33 的
-  插件目录；放弃 OBS 32 是破坏性变更，版本号应为 `2.0.0`。
+- **OBS 32 兼容的最后一版是 `1.0.1`。** 从 `2.0.0` 起只支持 OBS 33+、只发 OBS 33 的
+  插件目录；放弃 OBS 32 是破坏性变更，所以 2.0.0 是 major。
 
 ## 发版步骤
 
 1. 改 `buildspec.json` 的 `version`。破坏性支持范围变化抬 major。
 2. 更新 `README.md` / `README.zh.md` 的支持范围、安装路径与已知限制；按
-   [`docs/pre-release-checklist.md`](pre-release-checklist.md) 在目标 OBS 版本上跑完整清单。
+   [`docs/pre-release-checklist.md`](pre-release-checklist.md) 在目标 OBS 版本上补齐剩余项，
+   包括第 21 项 Windows 1.0.1 → 2.0.0 升级安装。
 3. 本地验证：构建、单测、安装布局、OBS 实机加载。
-4. 提交后打 tag，推送 tag：
+4. 先把 main 上待发布的提交推送，确认 `check-format`、`tests` 与 `build-project` 全绿；
+   不要给没跑过 CI 的提交打 tag。
+5. 打 tag，推送 tag：
 
    ```bash
    git tag 2.0.0
    git push origin 2.0.0
    ```
 
-5. CI 依次执行：单测 → 三平台构建/打包 → `create-release` 生成 draft release。
+6. CI 依次执行：单测 → 三平台构建/打包 → `create-release` 生成 draft release。
    单测失败时不会创建 release。
-6. 检查 draft 的产物与 `CHECKSUMS.txt`，用下面的模板补中英双语说明，再发布。
+7. 检查 draft 的产物与 `CHECKSUMS.txt`，用下面的模板补中英双语说明，再发布。
    draft 初始正文只有校验和；在它上面加说明，不要删掉校验和块。
-7. 发布后把 OBS 论坛资源页的版本与下载链接更新到新 release。
+8. 发布后更新 OBS 论坛资源页的版本、下载链接与兼容范围；同时确认 GitHub description
+   和社交预览图不再写 OBS 32。社交预览图没有 API，只能在 Settings → Social preview 手动上传。
 
 ## 发布产物
 
@@ -38,10 +42,14 @@
 | Ubuntu 26.04 | `scene-anchor-<version>-x86_64-linux-gnu.deb` | `/usr/lib/<multiarch>/obs-modules/plugins/` + `/usr/share/obs/obs-modules/plugins/` |
 | 调试/源码 | `-dbgsym.ddeb`、`-source.tar.xz` | 普通用户不需要 |
 
+Ubuntu 26.04 的系统源 OBS 仍是 32.1；上表的 `.deb` 只适用于 OBS 33（OBS 官方 PPA）。
+
 ## Release notes 模板
 
 ```markdown
-**Requires OBS Studio 33 or newer.** OBS 32 users should stay on 1.0.1.
+**Requires OBS Studio 33 or newer.** OBS 32 users should stay on 1.0.1. On Ubuntu 26.04, install OBS 33 from the [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) first — the archive's OBS is 32.1.
+
+The Windows installer removes the 1.0.1 legacy files (the old `...\scene-anchor\bin\64bit` under ProgramData and `obs-plugins\64bit` + `data\obs-plugins\scene-anchor` in a portable OBS) and installs under `<plugins>\scene-anchor\`. Close OBS before upgrading.
 
 <one-paragraph summary in English>
 
@@ -67,7 +75,9 @@
 
 ---
 
-**需要 OBS Studio 33 或更新版本。** OBS 32 用户请留在 1.0.1。
+**需要 OBS Studio 33 或更新版本。** OBS 32 用户请留在 1.0.1。Ubuntu 26.04 用户请先从 [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) 装 OBS 33——官方源里的 OBS 是 32.1。
+
+Windows 安装包会清掉 1.0.1 的旧文件（ProgramData 下的 `...\scene-anchor\bin\64bit`，便携版里的 `obs-plugins\64bit` 与 `data\obs-plugins\scene-anchor`），改装到 `<plugins>\scene-anchor\`。升级前请关闭 OBS。
 
 <一段中文摘要>
 

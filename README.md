@@ -55,7 +55,7 @@ Existing scene-tree plugins ([DigitOtter/obs_scene_tree_view](https://github.com
 
 Grab your platform's file from [Releases](https://github.com/rockbenben/scene-anchor/releases): **Windows** an `.exe` installer (or a `.zip`), **macOS** a `.pkg` installer, **Linux** a `.deb` (`sudo apt install ./scene-anchor-*.deb`).
 
-**This branch targets OBS 33+.** The latest published release is still 1.0.1 (OBS 32); the next release, 2.0.0, moves to OBS 33's plugin layout. OBS 32 users should stay on 1.0.1.
+**This release (2.0.0) requires OBS 33+.** OBS 32 users should stay on 1.0.1; 2.0.0 moves to OBS 33's plugin layout.
 
 **Windows: run the `.exe` and you're done.** It defaults to `C:\ProgramData\obs-studio\plugins\` — the machine-wide plugin directory OBS 33 reads for a normal install, and the one an OBS update won't wipe. For a **portable** OBS, point the installer at the folder containing `bin\64bit\obs64.exe`; it will install to `<OBS>\plugins\scene-anchor\` instead. The two layouts are chosen from the folder you pick, and switching between them removes the old copy so OBS never loads the plugin twice. Both targets are machine-wide, so it asks for administrator rights once. It shows up under Settings → Apps if you ever want it gone. The installer is not code-signed, so Windows SmartScreen will say *"Windows protected your PC"* — click **More info → Run anyway**.
 
@@ -73,6 +73,8 @@ Note it is `ProgramData`, not `%APPDATA%` — OBS reads plugins from the machine
 Restart OBS after any of these.
 
 **macOS: the installer is not signed.** Double-clicking the `.pkg` gets you *"cannot be opened because it is from an unidentified developer"* — right-click it and choose **Open** instead, or allow it under System Settings → Privacy & Security. This is about the installer, not the plugin: OBS ships `com.apple.security.cs.disable-library-validation` in its own entitlements (`frontend/cmake/macos/entitlements.plist`) precisely so it can load third-party plugins, so an unsigned plugin loads normally once installed. Signing the installer needs an Apple Developer ID, which most individual OBS plugin authors don't buy — [obs-move-transition](https://github.com/exeldro/obs-move-transition), [waveform](https://github.com/phandasm/waveform) and [obs-multi-rtmp](https://github.com/sorayuki/obs-multi-rtmp) all ship unsigned packages today.
+
+**Linux: install OBS 33 first.** Ubuntu 26.04's archive still ships OBS 32.1, which cannot load this plugin. Install OBS Studio 33 from the [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) (`sudo add-apt-repository ppa:obsproject/obs-studio && sudo apt update && sudo apt install obs-studio`), then install the `.deb`.
 
 **After installing, enable the dock.** SceneAnchor's dock is not visible by default — OBS does not automatically show new plugin docks. Open OBS's **Docks** menu (View → Docks on some platforms) and check **SceneAnchor** to make it appear. If you don't see the dock after installing, this is almost always the reason — the plugin has not failed to load.
 
@@ -92,13 +94,13 @@ Restart OBS after any of these.
 
 **Gray areas**: transition override is stored under the `"transition"` / `"transition_duration"` private-settings keys, and multiview visibility under `"show_in_multiview"`. These keys are accessible through public API calls, but the keys themselves are an OBS frontend convention rather than a documented API contract — a future OBS version could change them without notice.
 
-- **Only Windows has been exercised on real hardware.** The full manual checklist in [`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) — drag, undo/redo, delete-undo, themes, localisation — was run on Windows against OBS 32.2.2. The OBS 33.0.x build has been exercised for load/dock/search/switch, MRU ordering, the click-delay modes, collection copy/switch/rename + force-kill, the hotkey/search flow and a clean shutdown log; the remaining items have not been rerun on OBS 33. The macOS and Linux targets compile and package in CI, and the plugin uses no platform-specific code, but nobody has yet launched OBS with it on either. Treat those two as untested rather than broken, and please report what you find.
+- **Only Windows has been exercised on real hardware.** The manual checklist in [`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) was run on Windows against OBS 33.0.1 for this release: items 1–8, 10–13 and 15–20. Item 9 (secondary canvas) is not applicable without such a plugin. Item 14 (first-run dock visibility) and the manual custom-colour dialog and physical-hotkey/Studio Mode checks are called out in that file as the remaining release-day checks. The macOS and Linux targets compile and package in CI, and the plugin uses no platform-specific code, but nobody has yet launched OBS with it on either. Treat those two as untested rather than broken, and please report what you find.
 
 ## Reporting bugs
 
 Bugs go to [GitHub Issues](https://github.com/rockbenben/scene-anchor/issues). Four things make a report actionable:
 
-- **OBS version, platform, and plugin version.** The plugin prints the last one when it loads: `[scene-anchor] plugin loaded successfully (version 1.0.1)`.
+- **OBS version, platform, and plugin version.** The plugin prints the last one when it loads: `[scene-anchor] plugin loaded successfully (version 2.0.0)`.
 - **The log from that session.** Help → Log Files → Upload Current Log File gives a shareable link; every line this plugin writes is prefixed `[scene-anchor]`.
 - **What you did, what you expected, what happened** — and whether undo or redo was involved, because that is where this plugin's riskiest code paths are.
 - **If folders went missing, attach the scene collection itself** (Scene Collection → Export Scene Collection). The tree is stored inside that file, so it is the evidence; a lost-folders report without it usually can't be diagnosed.
@@ -137,7 +139,7 @@ cmake --preset ubuntu-x86_64
 cmake --build --preset ubuntu-x86_64 --config RelWithDebInfo
 ```
 
-Unit tests (no OBS runtime required; the tests link Qt only, with a fake OBS stub):
+Unit tests (no OBS runtime required; the tests link Qt only, with a fake OBS stub, but the UI test compiles `tree_dock.cpp` and therefore needs OBS headers — `.deps/include` from a local build, or `libobs-dev` on Ubuntu):
 
 ```bash
 cmake -S tests -B build_tests -G Ninja

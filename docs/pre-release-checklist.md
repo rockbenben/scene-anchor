@@ -11,7 +11,9 @@
 > 第 10 项双击 Rename/None/Transition 三种模式通过，单击切换改为延迟一个系统双击间隔；
 > 第 12/15 项只验证了浅/深主题和现有颜色标签，八色预设/自定义色/图标关闭后的文字色未走完；
 > 第 4（集合复制/切换/重命名/强杀）与第 18（热键）已于 2026-10-31 补跑通过，细节见两项末尾；
-> 第 9 项没有副画布插件，不适用。下一次发版前仍需按本清单完整走一遍。
+> 第 9 项没有副画布插件，不适用。**2026-10-31 发布前状态：第 1–8、10–13、15–20 项已通过；
+> 第 14 项尚未在 33 上重跑，第 15 项的自定义色对话框点选、第 18 项的物理热键与 Studio Mode 分支
+> 仍按各项末尾说明留待人工补做；第 21 项（Windows 升级安装）也待跑。**
 >
 > **2026-10-31 实时路径优化后补充（Windows 真机 OBS 33.0.x）**：MRU 按 uuid 取名与 chip 点击、
 > `none` 模式单击立即切换、`transition` 模式仍等一个双击间隔，以及第 20 项关闭日志（无插件的
@@ -423,3 +425,11 @@ dock->setFloating(true);    // 强制浮动
 **要看什么**：日志里不应出现 `Tried to call obs_frontend_remove_save_callback with no callbacks!`——这条只可能来自插件。`remove_event_callback`、`is_safe_mode_enabled` 之类的同类 ERROR 也可能来自 OBS 自身的 SourceTreeModel 或 obs-websocket，不能单独作为插件失败证据。
 
 **失败长什么样**：出现 `remove_save_callback` 那条，或在 `[scene-anchor] plugin unloaded` 附近同时出现 save 与 event 两条，说明 `obs_module_unload` 里又碰了已销毁的 frontend API。
+
+### 21. Windows 1.0.1 → 2.0.0 升级
+
+先用 1.0.1 的 Windows 安装包装一次（ProgramData 与便携版各走一遍），建一个带文件夹的场景集合；再用 2.0.0 安装包覆盖安装。
+
+**要看什么**：1.0.1 的旧位置被清掉——普通安装的 `...\scene-anchor\bin\64bit`，便携版的 `<OBS>\obs-plugins\64bit\scene-anchor.dll` 与 `<OBS>\data\obs-plugins\scene-anchor`；新文件在 `...\plugins\scene-anchor\scene-anchor.dll`。OBS 插件管理器里显示 2.0.0，且只加载一份插件；打开原场景集合，文件夹树与升级前一致。
+
+**失败长什么样**：新旧两份 DLL 同时被扫到、插件管理器仍显示 1.0.1、OBS 启动报重复模块，或升级后树丢失。

@@ -1,7 +1,7 @@
 # SceneAnchor 设计规格
 
 日期：2026-08-17
-状态：已实现并在 **Windows 真机**的 OBS 33.0.x 上跑了加载/面板/搜索/切换、MRU 顺序、单击延迟模式与关闭日志；完整交互清单（拖拽、撤销/重做、删除撤销）在 OBS 32.2.2 上验证，尚未在 33 上重跑。macOS 与 Linux 只有 CI 构建，从未真机运行过，见 §8
+状态：已实现并在 **Windows 真机**的 OBS 33.0.1 上跑过发布清单的第 1–8、10–13、15–20 项；第 9 项（副画布）不适用，第 14 项与第 15 项的自定义色对话框点选、第 18 项的物理热键/Studio Mode 分支留待发版前补做。macOS 与 Linux 只有 CI 构建，从未真机运行过，见 §8
 最后更新：2026-10-31
 仓库名与模块名：`scene-anchor`。**刻意不加 `obs-` 前缀**——obs-plugintemplate wiki 明确不建议
 模仿 obs-studio 内部模块的命名（`obs-x264`、`obs-filters` 一类），理由是用户难以分辨哪些是
@@ -159,7 +159,7 @@ O(n)，n 为场景数（基准按 600 跑）。单 canvas 时不显示 canvas �
 
 obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / macOS universal `.pkg` / Linux `.deb`（另出 `-dbgsym.ddeb` 与一份源码 `source.tar.xz`）——**Linux 没有 tar.gz**，早先这里写的 `deb+tar.gz` 是照抄模板文档、未经核对。`buildspec.json` 锁 obs-deps 与 Qt 版本。**仅 OBS 33+**，Windows 安装包按 OBS 33 的新插件布局（`<plugins>/<module>/<module>.dll + data`）分发；OBS 32 用户留在 1.0.1。本地开发 Windows，三平台走 GitHub Actions。
 
-**pin 策略：锁最老的受支持目标，不锁最新。** 当前 obs-studio 33.0.0 + Qt 6.11.1（obs-deps 2026-10-23）。对着 33.0.0 头文件编译，保证只调用整个 OBS 33.x 都存在的 API；Qt 6.11.1 是 OBS 33.0 自带的 Qt，插件因此能在 OBS 33 的运行时里加载。仅当支持范围移动或确需更新 API 时才抬 pin。OBS 33.0.x 在 Windows 上跑过加载/面板/搜索/切换、MRU 顺序、单击延迟模式、集合复制/切换/重命名 + 强杀、热键搜索流程与关闭日志；完整交互清单仍是 OBS 32.2.2 的结果。macOS 与 Linux 目标能在 CI 上编译打包，插件也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过；README 的「已知限制」里如实声明了这一点，别在发布材料里把「三平台出包」写成「三平台验证过」。
+**pin 策略：锁最老的受支持目标，不锁最新。** 当前 obs-studio 33.0.0 + Qt 6.11.1（obs-deps 2026-10-23）。对着 33.0.0 头文件编译，保证只调用整个 OBS 33.x 都存在的 API；Qt 6.11.1 是 OBS 33.0 自带的 Qt，插件因此能在 OBS 33 的运行时里加载。仅当支持范围移动或确需更新 API 时才抬 pin。OBS 33.0.1 在 Windows 上跑过加载/面板/搜索/切换、MRU 顺序、单击延迟模式、集合复制/切换/重命名 + 强杀、热键搜索流程、关闭日志，以及发布清单第 1–8、10–13、15–20 项；第 9 项不适用，第 14 项与自定义色对话框、物理热键/Studio Mode 两条留待发版前补做。macOS 与 Linux 目标能在 CI 上编译打包，插件也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过；README 的「已知限制」里如实声明了这一点，别在发布材料里把「三平台出包」写成「三平台验证过」。
 
 **插件清单 `manifest.json` 由 CMake 生成，不是静态文件。** OBS 33 的 `obs_module_load_metadata` 会读插件 data 目录下的这个文件；`display_name` 一旦存在就**压过** C 导出的 `obs_module_name()`，所以品牌名在这里定死为英文，界面里那个可本地化的名字由 dock 标题承担。名字、id、版本、网址全部从 `buildspec.json` 取，发版时不会漏改一处。完整取舍写在 `CMakeLists.txt` 生成它的那几行上方，此处不复述。
 
@@ -187,7 +187,7 @@ obs-plugintemplate 官方模板。发行产物实测为：Windows x64 `.zip` / m
 | 字段 | 值 |
 |---|---|
 | GitHub description | `OBS scene folders that survive collection copies and renames ｜ OBS 场景文件夹，复制改名集合都不丢` |
-| homepage | `https://github.com/rockbenben/scene-anchor/releases`，论坛资源页上线后换成资源页 |
+| homepage | `https://obsproject.com/forum/resources/sceneanchor.2666/`（论坛资源页） |
 | topics | `obs-studio` `obs-plugin` `scene-organizer` `scene-tree` `folders` `streaming` `windows` `macos` `linux` |
 | 社交预览图 | `assets/social-card.png`（1280×640），Settings → Social preview 上传 |
 | 论坛资源页标题 | `SceneAnchor — Scene Folder Tree with Search & Colors` |

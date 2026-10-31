@@ -30,7 +30,7 @@
 - **颜色标签**，文件夹和场景都能打——8 个预设加任意自定义色，渲染时自动调整以在你的主题下保持可读（见下）
 - **最近使用条**，一键切回；能放几个由面板宽度算出来，宁可少放也不把名字截成残段
 - **空状态引导**：还没有文件夹时，面板长得和 OBS 自带场景列表一模一样——连左边界都一样，因为展开箭头那一栏只在真有文件夹时才占位——于是它会说明怎么建第一个；建好就消失，面板小到放不下整句时也消失（截半句的引导读起来像坏了）
-- **面板右下角「⋯」按钮的选项**（也可在树空白处右键）：双击行为（转场 / 重命名 / 无）、选中是否切换场景、是否显示最近使用条、是否显示图标（一个开关同时管文件夹与场景，与 OBS 自己的来源列表同一套做法）
+- **面板右下角「⋯」按钮的选项**（也可在树空白处右键）：双击行为（转场 / 重命名 / 无）、点击或用方向键是否切换场景、是否显示最近使用条、是否显示图标（一个开关同时管文件夹与场景，与 OBS 自己的来源列表同一套做法）
 - **完整右键菜单**：转场到此场景、重命名（F2）、创建副本、删除、**滤镜**子菜单（复制 / 粘贴 / 打开）、**投影**子菜单（窗口，或按显示器全屏 — 报的是显示器真实像素尺寸）、截屏、覆盖转场动画（含时长）、在多视图中显示、颜色
 - **画得清楚的树**：展开箭头与逐层缩进导引线由插件自绘而非交给 Qt 默认样式，因而跟随当前主题、不会在深色下消失；每个文件夹都有箭头，空文件夹也有，所以文件夹永远不会被读成场景
 - **窄面板可用**：不给面板设人为下限；越拖越窄时，最近使用条会收成一枚按钮加一个「⋯」菜单
@@ -55,7 +55,7 @@
 
 到 [Releases](https://github.com/rockbenben/scene-anchor/releases) 下载对应平台的文件：**Windows** 是 `.exe` 安装包（也提供 `.zip`）；**macOS** 是 `.pkg` 安装包；**Linux** 是 `.deb`（`sudo apt install ./scene-anchor-*.deb`）。
 
-**这个分支只支持 OBS 33+。** 当前已发布的最新版仍是 1.0.1（OBS 32）；下一个版本 2.0.0 改用 OBS 33 的插件目录。OBS 32 用户请留在 1.0.1。
+**2.0.0 只支持 OBS 33+。** OBS 32 用户请留在 1.0.1；这一版改用 OBS 33 的插件目录。
 
 **Windows：双击 `.exe` 就装完了。** 默认装进 `C:\ProgramData\obs-studio\plugins\`——这是 OBS 33 在 Windows 上给常规安装读取的全机插件目录，也是 OBS 更新时不会被清掉的那个。**便携版**请在安装向导里把目标指向含 `bin\64bit\obs64.exe` 的 OBS 根目录，它会改装到 `<OBS>\plugins\scene-anchor\`。安装包按你选的目录挑布局，并在两者之间切换时清掉旧位置的副本，避免 OBS 把插件加载两次。两个目标都是全机范围的目录，所以会要一次管理员权限。想卸载在「设置 → 应用」里能找到。安装包未做代码签名，Windows SmartScreen 会拦一下（*「Windows 已保护你的电脑」*），点**详细信息 → 仍要运行**即可。
 
@@ -74,6 +74,8 @@ C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
 
 **macOS：安装包未签名。** 双击 `.pkg` 会看到*「无法打开，因为它来自身份不明的开发者」*——改成右键选**打开**，或到系统设置 → 隐私与安全性里放行。这是安装包的事，不是插件的事：OBS 自己的 entitlements 里带着 `com.apple.security.cs.disable-library-validation`（`frontend/cmake/macos/entitlements.plist`），正是为了能加载第三方插件，所以未签名的插件装好之后照常加载。给安装包签名需要 Apple Developer ID，多数独立 OBS 插件作者不会去买——[obs-move-transition](https://github.com/exeldro/obs-move-transition)、[waveform](https://github.com/phandasm/waveform)、[obs-multi-rtmp](https://github.com/sorayuki/obs-multi-rtmp) 至今发的都是未签名的包。
 
+**Linux：先装 OBS 33。** Ubuntu 26.04 官方源里的 OBS 仍是 32.1，加载不了本插件。先按 [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) 装 OBS 33（`sudo add-apt-repository ppa:obsproject/obs-studio && sudo apt update && sudo apt install obs-studio`），再装 `.deb`。
+
 **装好之后要手动打开面板。** SceneAnchor 的面板默认不可见——OBS 不会自动显示新插件的面板。打开 OBS 的**停靠部件**菜单（某些平台在 视图 → 停靠部件 下），勾选 **SceneAnchor** 就出来了。装完看不到面板，几乎都是这个原因，不是插件加载失败。
 
 ## 已知限制
@@ -86,18 +88,18 @@ C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
   个别插件确实提供了自己的切换口子（Aitum Vertical ≥1.6.1 在全局 proc handler 上注册了 `aitum_vertical_switch_scene`）。支持这一家而不支持下一家既不公平也难维护；而一个本面板切不了的场景，只占得住三个动词里的两个——找到、整理、切换。两个不足以换一个 UI 分区。
 - **切换「在多视图中显示」不会立刻刷新已打开的多视图投影。** 改动要等下一次树重建才生效（没有公开 API 能强制刷新多视图）。
 - **搜索过滤生效期间禁用拖放**，因为过滤会隐藏一部分项，放置位置可能与看到的不符。清空搜索框即可恢复拖放。
-- **默认「选中即切换场景」**——包括用方向键移动选中项时。这与 OBS 自带场景列表一致，但那个列表只用来切换，而本面板还要用来拖拽、改名、上色。用方向键越过八个场景去够一个文件夹，就是八次真实的节目切换。整理的时候在「⋯」菜单里关掉**选中即切换场景**；双击和菜单里的**转场到此场景**照常可用。
+- **默认「点击或方向键切换场景」**——包括用方向键移动选中项时。这与 OBS 自带场景列表一致，但那个列表只用来切换，而本面板还要用来拖拽、改名、上色。用方向键越过八个场景去够一个文件夹，就是八次真实的节目切换。整理的时候在「⋯」菜单里关掉**点击或方向键切换场景**；双击和菜单里的**转场到此场景**照常可用。
 - **在新版本里改默认值不会影响老用户。** OBS 在退出时持久化插件设置，所以插件只要跑过一次，存下来的值就压过代码里声明的任何默认值。默认值只对全新安装生效。
 
 **灰色地带**：转场覆盖存在 `"transition"` / `"transition_duration"` 这两个 private-settings 键下，多视图可见性存在 `"show_in_multiview"` 下。这些键可以通过公开 API 读写，但键名本身是 OBS 前端的约定而非有文档的 API 契约——未来某个 OBS 版本可能不打招呼就改掉。
 
-- **只有 Windows 经过真机验证。**[`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) 里的完整人工检查——拖拽、撤销/重做、删除撤销、主题、本地化——是在 Windows 上对着 OBS 32.2.2 跑的。OBS 33.0.x 构建已跑过加载、面板、搜索与切换，以及 MRU 顺序、单击延迟模式、集合复制/切换/重命名 + 强杀、热键搜索流程和关闭日志；其余项尚未在 OBS 33 上重跑。macOS 与 Linux 目标能在 CI 上编译打包，插件本身也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过。请把它们当作**未验证**而不是**有问题**，遇到什么也欢迎报给我。
+- **只有 Windows 经过真机验证。**[`docs/pre-release-checklist.md`](docs/pre-release-checklist.md) 的人工检查已在 Windows 上对着 OBS 33.0.1 跑过第 1–8、10–13、15–20 项；第 9 项（副画布）没有对应插件，不适用。第 14 项（首次使用 dock 的可见性）以及自定义色对话框点选、物理热键与 Studio Mode 分支，仍按清单里的说明留待发版前补做。macOS 与 Linux 目标能在 CI 上编译打包，插件本身也没有任何平台相关代码，但至今没有人在这两个系统上把 OBS 带着它启动过。请把它们当作**未验证**而不是**有问题**，遇到什么也欢迎报给我。
 
 ## 报告问题
 
 问题请提到 [GitHub Issues](https://github.com/rockbenben/scene-anchor/issues)。四样东西决定一份报告能不能被查下去：
 
-- **OBS 版本、平台，以及插件版本。**最后这项插件加载时会自己打进日志：`[scene-anchor] plugin loaded successfully (version 1.0.1)`。
+- **OBS 版本、平台，以及插件版本。**最后这项插件加载时会自己打进日志：`[scene-anchor] plugin loaded successfully (version 2.0.0)`。
 - **那一次运行的日志。**帮助 → 日志文件 → 上传当前日志文件会生成一个可分享的链接；本插件写的每一行都带 `[scene-anchor]` 前缀。
 - **你做了什么、预期什么、实际发生了什么**——以及是否涉及撤销或重做，那是本插件风险最高的代码路径。
 - **如果文件夹丢了，把场景集合本身附上**（场景集合 → 导出场景集合）。树就存在那个文件里，它本身就是证据；缺了它的「文件夹丢失」报告基本无法定位。
@@ -136,7 +138,7 @@ cmake --preset ubuntu-x86_64
 cmake --build --preset ubuntu-x86_64 --config RelWithDebInfo
 ```
 
-单元测试（不需要 OBS 运行时；测试本身只链接 Qt，用假 OBS 桩）：
+单元测试（不需要 OBS 运行时；测试本身只链接 Qt、用假 OBS 桩，但 UI 测试会编译 `tree_dock.cpp`，因此需要 OBS 头文件——本地构建的 `.deps/include`，或 Ubuntu 上的 `libobs-dev`）：
 
 ```bash
 cmake -S tests -B build_tests -G Ninja
