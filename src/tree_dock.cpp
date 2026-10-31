@@ -18,10 +18,13 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QShortcut>
+#include <QStyleHints>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QTimer>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPalette>
@@ -32,6 +35,7 @@
 #include <QScrollBar>
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
+#include <QTimer>
 #include <QToolButton>
 #include <QVector>
 #include <QVBoxLayout>
@@ -67,9 +71,17 @@ static const char *kMime = "application/x-scene-anchor";
 // 这层不确定性不再影响选对哪套图标，只是没有一个具体比值可以写在这里。
 static QIcon anchorIcon(const char *file)
 {
+	// 按文件名缓存：深浅两套是不同文件，THEME_CHANGED 自然会取到另一套；
+	// 之前每次 rebuild 都要重新读盘六次。
+	static QHash<QByteArray, QIcon> cache;
+	const QByteArray key(file);
+	auto it = cache.constFind(key);
+	if (it != cache.constEnd())
+		return it.value();
 	char *path = obs_module_file(file);
 	QIcon icon(QString::fromUtf8(path ? path : ""));
 	bfree(path);
+	cache.insert(key, icon);
 	return icon;
 }
 
@@ -243,8 +255,21 @@ QMimeData *AnchorModel::mimeData(const QModelIndexList &indexes) const
 class AnchorTreeView : public QTreeView {
 public:
 	using QTreeView::QTreeView;
+	bool dragging() const { return dragging_; }
 
 protected:
+	void mousePressEvent(QMouseEvent *e) override
+	{
+		// 上一轮拖拽的旗标留到下一次按下再清：QDrag::exec() 返回后 Qt 仍可能补发
+		// clicked，若在 startDrag 返回时就清掉，松手会被当成一次普通点击。
+		dragging_ = false;
+		QTreeView::mousePressEvent(e);
+	}
+	void startDrag(Qt::DropActions actions) override
+	{
+		dragging_ = true;
+		QTreeView::startDrag(actions); // 内部 QDrag::exec() 阻塞到拖拽结束
+	}
 	void drawBranches(QPainter *p, const QRect &rect, const QModelIndex &index) const override
 	{
 		const int ind = indentation();
@@ -299,6 +324,9 @@ protected:
 		}
 		p->restore();
 	}
+
+private:
+	bool dragging_ = false;
 };
 
 bool AnchorModel::canDropMimeData(const QMimeData *data, Qt::DropAction, int, int, const QModelIndex &parent) const
@@ -424,6 +452,7 @@ TreeDock::TreeDock()
 
 	search_ = new QLineEdit(this);
 	search_->setPlaceholderText(QString::fromUtf8(obs_module_text("SceneAnchor.Search")));
+	search_->setAccessibleName(search_->placeholderText());
 	search_->setClearButtonEnabled(true);
 	lay->addWidget(search_);
 
@@ -500,6 +529,9 @@ TreeDock::TreeDock()
 	// 但先前一路砍到 12 又走过头——配合当时去掉的场景图标，层级几乎看不出来，整列表读起来是平的。
 	// 16 是两者之间：层级仍可辨，横向开销比默认小两成。
 	view_->setIndentation(16);
+	// 每行都设了同一个 sizeHint；告诉视图行高一致，Qt 可跳过逐行量高，
+	// 600 场景时重建与滚动都更省。
+	view_->setUniformRowHeights(true);
 	// 显式定图标尺寸，别让渲染尺寸随平台样式的默认值漂移——树的左边界是按它算的。
 	view_->setIconSize(QSize(16, 16));
 	// Task 7 刻意不设 EditTriggers/ItemIsEditable：当时没有 itemChanged 处理器，F2 打开的是 Qt
@@ -550,14 +582,18 @@ TreeDock::TreeDock()
 	// 与两个行图标同源、同主题判定（见 rebuild()），不再有字形与图标混排。
 	btnAddScene_ = new QToolButton(this);
 	btnAddScene_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.AddScene")));
+	btnAddScene_->setAccessibleName(btnAddScene_->toolTip());
 	btnAddFolder_ = new QToolButton(this);
 	// fix round 2：图标改到 rebuild() 里跟两个行图标一起取（同一次主题判定），
 	// 不在这里单独设一次——那次设定会在 THEME_CHANGED 之后再也不刷新，见 rebuild() 内注释。
 	btnAddFolder_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.AddFolder")));
+	btnAddFolder_->setAccessibleName(btnAddFolder_->toolTip());
 	btnRemove_ = new QToolButton(this);
 	btnRemove_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Remove")));
+	btnRemove_->setAccessibleName(btnRemove_->toolTip());
 	btnSettings_ = new QToolButton(this);
 	btnSettings_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Settings")));
+	btnSettings_->setAccessibleName(btnSettings_->toolTip());
 	btnSettings_->setPopupMode(QToolButton::InstantPopup);
 	// 「造」的两枚与「毁」的一枚之间加一条分隔：此前三个 25×25 的按钮同权重并排，
 	// 而其中一枚点下去对文件夹是静默解散结构、对场景是弹确认框——后果最重的那个
@@ -578,6 +614,7 @@ TreeDock::TreeDock()
 	lay->addLayout(btnRow);
 	// 菜单在弹出前现建：三个开关的勾选态与双击模式都是即时值，构造时填一次就会常驻旧值。
 	auto *settingsMenu = new QMenu(btnSettings_);
+	settingsMenu->setToolTipsVisible(true); // 选中即切换的 tooltip 是这里唯一的解释
 	connect(settingsMenu, &QMenu::aboutToShow, this, [this, settingsMenu] {
 		settingsMenu->clear();
 		buildSettingsMenu(*settingsMenu);
@@ -612,9 +649,11 @@ TreeDock::TreeDock()
 			// 头文件与库，无 .cpp），但对外可观察的保证一致。
 			view_->setDragDropMode(QAbstractItemView::NoDragDrop);
 			updateStatus();
+			updateHintCap();
 		} else {
 			view_->setDragDropMode(QAbstractItemView::InternalMove);
 			updateStatus();
+			updateHintCap();
 			rebuild(); // 恢复 store 记录的展开态——过滤期间 expandWrite 已抑制回写，store 未被
 				   // expandAll() 或过滤中的手动折叠污染，这里重建即是精确回到过滤前的样子
 		}
@@ -702,18 +741,80 @@ TreeDock::TreeDock()
 	// 控件——把末尾的场景拖进文件夹，方向键走 8 行就是 8 次直播切换。默认保持开（匹配原生，
 	// 且把原生场景 dock 关掉、拿本 dock 当场景列表的人需要它），整理时可临时关掉。
 	// 关掉后仍可用双击（模式为「转场」时）或右键「切换」明确切换，不会失去切换手段。
+	clickSwitchTimer_.setSingleShot(true);
+	connect(&clickSwitchTimer_, &QTimer::timeout, this, [this] {
+		const QString uuid = pendingClickUuid_;
+		pendingClickUuid_.clear();
+		if (!uuid.isEmpty())
+			ObsBridge::get()->switchToScene(uuid);
+	});
+	connect(view_, &QTreeView::pressed, this, [this] {
+		clickSwitchTimer_.stop();
+		pendingClickUuid_.clear();
+	});
 	connect(view_->selectionModel(), &QItemSelectionModel::currentChanged, this,
 		[this](const QModelIndex &cur, const QModelIndex &) {
-			if (rebuilding_ || !cur.isValid())
+			clickSwitchTimer_.stop();
+			pendingClickUuid_.clear();
+			if (rebuilding_)
+				return;
+			updateRemoveTooltip();
+			if (!cur.isValid())
 				return;
 			if (!ObsBridge::get()->option(kOptSelectSwitches.key, kOptSelectSwitches.def))
+				return;
+			// 左键按住先只选中，切画面留到松手后的 clicked（见下）；右键只打开菜单，不切。
+			// 否则按下开始拖一个场景、或右键点开整理菜单的那一刻，直播画面就已经切走了。
+			if (QGuiApplication::mouseButtons() & (Qt::LeftButton | Qt::RightButton))
 				return;
 			QStandardItem *it = itemAtSourceIndex(cur);
 			if (it && it->data(RoleKind).toInt() == RowPlan::Scene)
 				ObsBridge::get()->switchToScene(it->data(RoleUuid).toString());
 		});
 
+	// 左键点击的切换点：松手且没有发生过拖拽。方向键走上面的 currentChanged；右键不切换。
+	connect(view_, &QTreeView::clicked, this, [this](const QModelIndex &idx) {
+		if (rebuilding_)
+			return;
+		auto *anchorView = static_cast<AnchorTreeView *>(view_);
+		if (anchorView->dragging())
+			return;
+		auto *b = ObsBridge::get();
+		if (!b->option(kOptSelectSwitches.key, kOptSelectSwitches.def))
+			return;
+		// Ctrl/Shift 点选是在拼多选，不是在切节目；也不能给延迟切换计时器留活。
+		if (QGuiApplication::keyboardModifiers() & (Qt::ControlModifier | Qt::ShiftModifier))
+			return;
+		QStandardItem *it = itemAtSourceIndex(idx);
+		if (!it || it->data(RoleKind).toInt() != RowPlan::Scene)
+			return;
+		const QString uuid = it->data(RoleUuid).toString();
+		// clicked 对当前行也会发；重复对同一个节目/预览场景调用会重放转场（OBS 非 Studio
+		// 的 SetCurrentScene 没有同场景早退）。但“选中了但还没切过去”的场景——例如刚拖完
+		// 的场景——必须还能靠一次点击切过去，所以只跳过同一个节目/预览，而不是跳过所有
+		// 已选中的行。Studio 下节目场景仍可用来设预览；只跳过已经是预览的那个。
+		if (uuid == b->currentPreviewUuid())
+			return;
+		if (b->currentPreviewUuid().isEmpty() && uuid == b->currentSceneUuid())
+			return;
+		// 双击模式为 none 时不存在"第二下"要保护的动作，单击可以立即切换，
+		// 不必白等一个双击间隔。
+		if (b->doubleClickMode() == QLatin1String("none")) {
+			clickSwitchTimer_.stop();
+			pendingClickUuid_.clear();
+			b->switchToScene(uuid);
+			return;
+		}
+		// 先不切：双击的第一下也是 clicked，立即切会触发 rebuild，把第二下要用的
+		// 索引（尤其 Rename 的 view_->edit）作废。等过一个系统双击间隔再切。
+		pendingClickUuid_ = uuid;
+		clickSwitchTimer_.setInterval(QGuiApplication::styleHints()->mouseDoubleClickInterval());
+		clickSwitchTimer_.start();
+	});
+
 	connect(view_, &QTreeView::doubleClicked, this, [this](const QModelIndex &pi) {
+		clickSwitchTimer_.stop();
+		pendingClickUuid_.clear();
 		QStandardItem *it = itemAtSourceIndex(pi);
 		if (!it || it->data(RoleKind).toInt() != RowPlan::Scene)
 			return;
@@ -726,6 +827,8 @@ TreeDock::TreeDock()
 	});
 
 	connect(btnAddFolder_, &QToolButton::clicked, this, [this] {
+		if (!search_->text().isEmpty())
+			return;
 		auto *bb = ObsBridge::get();
 		// 落位：选中 folder → 其内末尾；选中 scene(placed) → 同级其后；否则根末尾
 		QString canvas = bb->liveCanvases().empty() ? QString() : bb->liveCanvases().front().uuid;
@@ -744,13 +847,12 @@ TreeDock::TreeDock()
 		}
 		if (canvas.isEmpty())
 			return;
-		bb->applyTreeOp(obs_module_text("SceneAnchor.Undo.AddFolder"), [&] {
-			return bb->store.insertFolder(canvas, parent, index,
-						      QString::fromUtf8(obs_module_text("SceneAnchor.NewFolder")));
-		});
+		addFolder(canvas, parent, index);
 	});
 
 	connect(btnAddScene_, &QToolButton::clicked, this, [this] {
+		if (!search_->text().isEmpty())
+			return;
 		auto *bb = ObsBridge::get();
 		const auto live = bb->liveCanvases();
 		if (live.empty())
@@ -794,6 +896,59 @@ TreeDock::TreeDock()
 	obs_log(LOG_INFO, "dock constructed");
 }
 
+void TreeDock::addFolder(const QString &canvas, const NodePath &parent, int index)
+{
+	if (!search_->text().isEmpty())
+		return;
+	auto *b = ObsBridge::get();
+	NodePath createdPath;
+	bool created = false;
+	b->applyTreeOp(obs_module_text("SceneAnchor.Undo.AddFolder"), [&] {
+		created = b->store.insertFolder(canvas, parent, index,
+						QString::fromUtf8(obs_module_text("SceneAnchor.NewFolder")),
+						&createdPath);
+		return created;
+	});
+	if (!created)
+		return;
+	// 新建的文件夹先选中再进入改名：否则它只是树里多出一行叫「新文件夹」的东西，
+	// 用户得自己发现 F2/右键改名——连续点两次就得到两个一模一样的行。
+	pendingEditCanvas_ = canvas;
+	pendingEditPath_ = createdPath;
+	hasPendingEdit_ = true;
+}
+
+void TreeDock::updateCreateAvailability()
+{
+	if (!btnAddScene_ || !btnAddFolder_)
+		return;
+	const bool can = search_->text().isEmpty();
+	const QString blocked = QString::fromUtf8(obs_module_text("SceneAnchor.FilterNoDrag"));
+	auto apply = [&](QToolButton *b, const QString &normal) {
+		b->setEnabled(can);
+		const QString tip = can ? normal : blocked;
+		b->setToolTip(tip);
+		b->setAccessibleName(tip);
+	};
+	apply(btnAddScene_, QString::fromUtf8(obs_module_text("SceneAnchor.AddScene")));
+	apply(btnAddFolder_, QString::fromUtf8(obs_module_text("SceneAnchor.AddFolder")));
+}
+
+void TreeDock::updateRemoveTooltip()
+{
+	const QModelIndex cur = view_->currentIndex();
+	QStandardItem *it = cur.isValid() ? itemAtSourceIndex(cur) : nullptr;
+	const int kind = it ? it->data(RoleKind).toInt() : -1;
+	const char *key = "SceneAnchor.Remove";
+	if (kind == RowPlan::Folder)
+		key = "SceneAnchor.Menu.RemoveFolderTip";
+	else if (kind == RowPlan::Scene)
+		key = "SceneAnchor.Menu.RemoveSceneTip";
+	const QString tip = QString::fromUtf8(obs_module_text(key));
+	btnRemove_->setToolTip(tip);
+	btnRemove_->setAccessibleName(tip);
+}
+
 QStandardItem *TreeDock::itemAtSourceIndex(const QModelIndex &proxyIdx) const
 {
 	return model_->itemFromIndex(proxy_->mapToSource(proxyIdx));
@@ -809,10 +964,8 @@ NodePath TreeDock::pathOfItem(const QStandardItem *it) const
 
 QModelIndex TreeDock::findSceneIndex(const QString &uuid) const
 {
-	for (QStandardItem *it : model_->findItems(QStringLiteral("*"), Qt::MatchWildcard | Qt::MatchRecursive))
-		if (it->data(RoleKind).toInt() == RowPlan::Scene && it->data(RoleUuid).toString() == uuid)
-			return proxy_->mapFromSource(model_->indexFromItem(it));
-	return {};
+	QStandardItem *it = sceneItems_.value(uuid, nullptr);
+	return it ? proxy_->mapFromSource(model_->indexFromItem(it)) : QModelIndex();
 }
 
 QModelIndex TreeDock::findFolderIndex(const QString &canvas, const NodePath &path) const
@@ -829,6 +982,7 @@ void TreeDock::rebuild()
 	if (rebuilding_)
 		return;
 	rebuilding_ = true;
+	const quint64 expansionGen = ++expansionGeneration_;
 
 	// Task 12 fix round 1：图标按主题分色（见 anchorFolderIcon/anchorSceneIcon），
 	// THEME_CHANGED 触发的这次 rebuild 必须真的换色——static 缓存会把第一次主题下的
@@ -898,7 +1052,11 @@ void TreeDock::rebuild()
 	const auto live = b->liveCanvases();
 	const auto plan =
 		planProjection(b->store, live, QString::fromUtf8(obs_module_text("SceneAnchor.UnfiledHeader")));
+	// 行重建前先取一次当前状态：字体在构建时直接写好，避免构建完再全表扫描一遍。
+	const QString prog = b->currentSceneUuid();
+	const QString prev = b->currentPreviewUuid();
 
+	sceneItems_.clear();
 	model_->removeRows(0, model_->rowCount());
 	// 行高钉成「图标高与字体高的较大值 + 1」，与图标开不开无关。不钉的话关掉图标
 	// 行高从 18 掉到 15（量具实测），一个纯显示开关把整棵树重排一遍，正读着的行会跳位。
@@ -929,6 +1087,8 @@ void TreeDock::rebuild()
 			f = Qt::ItemIsEnabled | Qt::ItemIsDropEnabled; // header：不可选，不可编辑
 		item->setFlags(f);
 		item->setSizeHint(QSize(0, rowH));
+		if (r.kind != RowPlan::Header)
+			item->setToolTip(r.name); // 窄 dock 会省略长名字，悬停时给出全名
 		// 画布表头此前与场景行同字重同色，看着像可点的树项，实际不可选。用调色板的
 		// 颜色标签 = 给这一行已有的图标染色（见 tintedIcon 上方的三轮取舍记录）。
 		// 上色前先按实际背景调对比度：存的是原色，画的是可读的那一版。图标按图形门槛，
@@ -952,12 +1112,30 @@ void TreeDock::rebuild()
 			item->setForeground(view_->palette().color(QPalette::PlaceholderText));
 		} else if (icons) {
 			const QIcon &base = r.kind == RowPlan::Folder ? folderIcon : sceneIcon;
-			item->setIcon(tag.isValid() ? tintedIcon(base, tag) : base);
+			if (!tag.isValid()) {
+				item->setIcon(base);
+			} else {
+				// 同一 (基础图标, 标签色) 在多次 rebuild 之间复用染色结果；基础图标
+				// 按文件缓存，深浅主题是不同文件、cacheKey 不同，不会串色。
+				const QString key =
+					QString::number(base.cacheKey()) + QLatin1Char('/') + tag.name(QColor::HexArgb);
+				auto cached = tintedIcons_.constFind(key);
+				if (cached == tintedIcons_.constEnd())
+					cached = tintedIcons_.insert(key, tintedIcon(base, tag));
+				item->setIcon(cached.value());
+			}
 		} else if (tagText.isValid()) {
 			// 没有图标可染，颜色标签落到文字上。注意：这一行被选中时，样式会用
 			// HighlightedText 覆盖逐行的前景色，标签色在选中那一瞬间不显示——
 			// 要保住它得把 delegate 请回来，§6b 记着那条路为什么被放弃。
 			item->setForeground(tagText);
+		}
+		if (r.kind == RowPlan::Scene) {
+			QFont f = item->font();
+			f.setBold(!prog.isEmpty() && r.uuid == prog);
+			f.setItalic(!prev.isEmpty() && r.uuid == prev);
+			item->setFont(f);
+			sceneItems_.insert(r.uuid, item);
 		}
 		parents[r.depth]->appendRow(item);
 		parents.resize(r.depth + 1);
@@ -980,35 +1158,50 @@ void TreeDock::rebuild()
 	// 状态，Qt 明确不建议。这里在构建期算好存进 role，绘制时只读。
 	for (const auto &[it, exp] : expandStates)
 		it->setData(it->rowCount() > 0, RoleHasKids);
-	for (const auto &[it, exp] : expandStates)
-		view_->setExpanded(proxy_->mapFromSource(model_->indexFromItem(it)), exp);
-
-	// 过滤生效期间，展开态由过滤决定而非 store。外部事件（热键改名、脚本增删场景、切主题）
-	// 触发的 rebuild 若不重新展开，命中项的父链会折回 store 记录的状态 —— 用户眼中就是
-	// 「刚搜到的东西自己消失了」，要等下一次按键才回来。直播场景下热键与脚本是常驻的。
-	if (!search_->text().isEmpty())
-		view_->expandAll();
+	// 展开态必须等本轮事件循环结束、proxy 把新模型行映射出来后再应用。同步 setExpanded
+	// 在真实 OBS（Qt 6.11 + QSortFilterProxyModel）里会落在旧索引上，搜索期间被 expandAll
+	// 展开的文件夹就会在清空搜索后折不动；store 本身一直是对的。用 generation 丢弃
+	// 已被后续 rebuild 淘汰的旧 item 指针。
+	const auto expansion = expandStates;
+	QTimer::singleShot(0, this, [this, expansionGen, expansion] {
+		if (expansionGen != expansionGeneration_)
+			return;
+		if (!search_->text().isEmpty()) {
+			view_->expandAll();
+			return;
+		}
+		// 逐项设置而不是先 collapseAll 再展开：整树先折叠再展开在真机上会闪一下，
+		// 而这里本来就知道每个文件夹该开还是该关（搜索 expandAll 留下的开状态也靠
+		// exp=false 收回）。新建的 item 默认折叠，所以两向都显式设。
+		const bool wasRebuilding = rebuilding_;
+		rebuilding_ = true;
+		for (const auto &[it, exp] : expansion) {
+			const QModelIndex idx = proxy_->mapFromSource(model_->indexFromItem(it));
+			if (idx.isValid())
+				view_->setExpanded(idx, exp);
+		}
+		rebuilding_ = wasRebuilding;
+	});
 
 	// 恢复选中：原选中是 folder → 按 (canvas, path) 找，且要求 name 也对得上，两者任一对不上
 	// 就不选（宁可"没选中"，不可"选错"——拖拽会让别的文件夹滑进原文件夹腾出的位置，见 J-7）；
 	// 原选中是 scene → 按 uuid 找；都没有（原本无选中）→ 落到当前场景。
 	// selIsFolder 时 selUuid 恒空，不会误落到当前场景。
 	const QString target = (!selUuid.isEmpty() || selIsFolder) ? selUuid : b->currentSceneUuid();
-	if (!target.isEmpty() || selIsFolder) {
+	QStandardItem *restore = target.isEmpty() ? nullptr : sceneItems_.value(target, nullptr);
+	if (!restore && selIsFolder) {
 		for (QStandardItem *it :
 		     model_->findItems(QStringLiteral("*"), Qt::MatchWildcard | Qt::MatchRecursive)) {
-			const int kind = it->data(RoleKind).toInt();
-			const bool sceneMatch = !target.isEmpty() && kind == RowPlan::Scene &&
-						it->data(RoleUuid).toString() == target;
-			const bool folderMatch = selIsFolder && kind == RowPlan::Folder &&
-						 it->data(RoleCanvas).toString() == selFolderCanvas &&
-						 pathOfItem(it) == selFolderPath && it->text() == selFolderName;
-			if (sceneMatch || folderMatch) {
-				view_->setCurrentIndex(proxy_->mapFromSource(model_->indexFromItem(it)));
+			if (it->data(RoleKind).toInt() == RowPlan::Folder &&
+			    it->data(RoleCanvas).toString() == selFolderCanvas && pathOfItem(it) == selFolderPath &&
+			    it->text() == selFolderName) {
+				restore = it;
 				break;
 			}
 		}
 	}
+	if (restore)
+		view_->setCurrentIndex(proxy_->mapFromSource(model_->indexFromItem(restore)));
 	// 先决定提示的显隐再恢复滚动位置：反过来的话，显隐引发的重排会改变滚动条量程，
 	// 刚设好的值被夹掉，用户眼里就是"建完文件夹视图跳了一下"。
 	hintWanted_ = folderRows == 0;
@@ -1035,35 +1228,72 @@ void TreeDock::rebuild()
 	view_->setRootIsDecorated(rootFolder);
 	view_->verticalScrollBar()->setValue(scroll);
 	rebuilding_ = false;
-	onSceneStateChanged();
+	// 字体已在建行时按 prog/prev 写好，这里只刷新 MRU；不再走一次全表扫描。
+	lastProg_ = prog;
+	lastPrev_ = prev;
+	refreshMru();
+	updateRemoveTooltip();
+	if (hasPendingEdit_) {
+		const QString cv = pendingEditCanvas_;
+		const NodePath path = pendingEditPath_;
+		hasPendingEdit_ = false;
+		// rebuild 本身是队列调用；再等一轮事件循环，让视图完成布局后再开编辑器。
+		QTimer::singleShot(0, this, [this, cv, path] {
+			const QModelIndex idx = findFolderIndex(cv, path);
+			if (!idx.isValid())
+				return;
+			for (QModelIndex p = idx.parent(); p.isValid(); p = p.parent())
+				view_->expand(p);
+			view_->setCurrentIndex(idx);
+			view_->selectionModel()->select(idx, QItemSelectionModel::ClearAndSelect |
+								     QItemSelectionModel::Rows);
+			view_->scrollTo(idx);
+			view_->edit(idx);
+		});
+	}
 }
 
 void TreeDock::onSceneStateChanged()
 {
+	auto *b = ObsBridge::get();
+	applySceneHighlight(b->currentSceneUuid(), b->currentPreviewUuid());
+	refreshMru();
+}
+
+void TreeDock::applySceneHighlight(const QString &prog, const QString &prev)
+{
+	if (prog == lastProg_ && prev == lastPrev_)
+		return;
 	// 字体高亮是纯显示变更，但 setFont → setData(FontRole) → dataChanged → itemChanged，
 	// 而 itemChanged 处理器不按 role 过滤，会把它当成改名提交（Critical，最终整支审查发现）。
-	// rebuilding_ 挡不住：rebuild() 在调用本函数的前一行就已清除它，SCENE_CHANGED 路径更从未设过。
+	// 这里只碰旧/新 program 与 preview 至多四行，且逐项确认字体真的变了才写。
 	const bool wasRebuilding = rebuilding_;
 	rebuilding_ = true;
-	auto *b = ObsBridge::get();
-	const QString prog = b->currentSceneUuid();
-	const QString prev = b->currentPreviewUuid();
-	for (QStandardItem *it : model_->findItems(QStringLiteral("*"), Qt::MatchWildcard | Qt::MatchRecursive)) {
-		if (it->data(RoleKind).toInt() != RowPlan::Scene)
+	const QString affected[] = {lastProg_, lastPrev_, prog, prev};
+	for (const QString &u : affected) {
+		if (u.isEmpty())
+			continue;
+		QStandardItem *it = sceneItems_.value(u, nullptr);
+		if (!it)
 			continue;
 		QFont f = it->font();
-		const QString u = it->data(RoleUuid).toString();
-		f.setBold(u == prog);
-		f.setItalic(!prev.isEmpty() && u == prev);
+		const bool bold = !prog.isEmpty() && u == prog;
+		const bool italic = !prev.isEmpty() && u == prev;
+		if (f.bold() == bold && f.italic() == italic)
+			continue;
+		f.setBold(bold);
+		f.setItalic(italic);
 		it->setFont(f);
 	}
-	rebuilding_ = wasRebuilding; // 恢复而非硬置 false：万一未来某处从 rebuild 内部调用本函数，不破坏外层的保护
-	refreshMru();
+	rebuilding_ = wasRebuilding;
+	lastProg_ = prog;
+	lastPrev_ = prev;
 }
 
 // 过滤态的一句话状态。
 void TreeDock::updateStatus()
 {
+	updateCreateAvailability();
 	const bool filtering = !search_->text().isEmpty();
 	if (!filtering) {
 		status_->setVisible(false);
@@ -1071,18 +1301,22 @@ void TreeDock::updateStatus()
 		return;
 	}
 	// 走视图的可见顺序而不是自己递归模型：折叠起来的文件夹里的命中项屏幕上看不见，
-	// 把它算成「有结果」就会漏报无匹配（与搜索回车那处同一个理由）。
-	bool anyScene = false;
-	for (QModelIndex i = proxy_->index(0, 0, QModelIndex()); i.isValid(); i = view_->indexBelow(i))
-		if (i.data(RoleKind).toInt() == RowPlan::Scene) {
-			anyScene = true;
+	// 把它算成「有结果」就会漏报无匹配（与搜索回车那处同一个理由）。文件夹本身也是结果：
+	// 只匹配到一个空文件夹时树里明明有行，不能报「没有匹配」。未归类表头只是分组标题，
+	// 不算结果——否则搜到表头文字时会错误地压掉 NoMatch。
+	bool anyResult = false;
+	for (QModelIndex i = proxy_->index(0, 0, QModelIndex()); i.isValid(); i = view_->indexBelow(i)) {
+		const int kind = i.data(RoleKind).toInt();
+		if (kind == RowPlan::Scene || kind == RowPlan::Folder) {
+			anyResult = true;
 			break;
 		}
+	}
 	// 无匹配是第三种状态，既不是「空库」也不是「有内容」：以前它长得像插件坏了。
 	// 两个键名分开写：check-locales.py 靠 grep 代码里的 obs_module_text 调用来核对引用，
 	// 把键塞进三元表达式的条件里会让它误判成"定义了但没用到"。
-	const QString text = anyScene ? QString::fromUtf8(obs_module_text("SceneAnchor.FilterNoDrag"))
-				      : QString::fromUtf8(obs_module_text("SceneAnchor.NoMatch"));
+	const QString text = anyResult ? QString::fromUtf8(obs_module_text("SceneAnchor.FilterNoDrag"))
+				       : QString::fromUtf8(obs_module_text("SceneAnchor.NoMatch"));
 	status_->setText(text);
 	status_->setVisible(true);
 }
@@ -1098,7 +1332,9 @@ void TreeDock::updateHintCap()
 	// 用 heightForWidth 按当前可用宽度算真实换行高度，比预估行数可靠；
 	// 减 20 是 hint_ 自己的左右 contentsMargins（10+10）。
 	const bool fits = hint_->heightForWidth(qMax(1, width() - 20)) <= cap;
-	hint_->setVisible(hintWanted_ && fits);
+	// 搜索时空状态提示会和“新建入口已禁用”矛盾：提示让用户点文件夹按钮，按钮却是灰的。
+	// 过滤期间整段隐藏，只留状态行；清空搜索后 hintWanted_ 仍表示“没有文件夹”，提示回来。
+	hint_->setVisible(hintWanted_ && search_->text().isEmpty() && fits);
 }
 
 void TreeDock::resizeEvent(QResizeEvent *e)
@@ -1111,36 +1347,52 @@ void TreeDock::resizeEvent(QResizeEvent *e)
 
 void TreeDock::refreshMru()
 {
-	while (mruLayout_->count() > 1) { // 尾部 stretch 保留
-		QLayoutItem *li = mruLayout_->takeAt(0);
-		if (li->widget())
-			li->widget()->deleteLater();
-		delete li;
-	}
 	mruWidth_ = width();
 	auto *b = ObsBridge::get();
-	// 关掉时直接隐藏并返回：上面的清空循环已经把 chip 摘干净，这里不再枚举 liveCanvases，
-	// 省掉一次对 OBS 的场景遍历（本函数每次场景切换都会跑）。
+	const QStringList mru = b->store.mru();
+
+	// 清空时只摘布局并隐藏，deleteLater 留给事件循环：本函数可能正在某个 chip 的
+	// clicked 信号里被调用（点 chip → 切场景 → sceneStateChanged → 这里），
+	// 同步 delete 掉信号发送者不安全。
+	auto clearChips = [this] {
+		for (QToolButton *chip : mruChips_) {
+			mruLayout_->removeWidget(chip);
+			chip->hide();
+			chip->deleteLater();
+		}
+		mruChips_.clear();
+		if (mruMore_) {
+			mruLayout_->removeWidget(mruMore_);
+			mruMore_->hide();
+			mruMore_->deleteLater();
+			mruMore_ = nullptr;
+			mruMoreMenu_ = nullptr;
+		}
+	};
+
+	// 关掉时直接隐藏并返回，不再枚举场景（本函数每次场景切换都会跑）。
 	if (!b->option(kOptShowMru.key, kOptShowMru.def)) {
+		clearChips();
 		mruScroll_->setVisible(false);
 		return;
 	}
-	const auto live = b->liveCanvases();
-	if (live.empty())
-		return;
-	std::map<QString, QString> names;
-	for (const auto &s : live.front().scenes)
-		names[s.uuid] = s.name; // MRU 只做主画布
-	const QStringList mru = b->store.mru();
+
+	// MRU 只有最近几个 uuid：逐个按 uuid 取名，不再为整条 MRU 枚举整棵场景列表。
+	// 之前这里调 liveCanvases() + 建全场景名字表，切换耗时随场景数线性增长；
+	// 现在只剩 ≤5 次 obs_get_source_by_uuid。
+	QVector<QPair<QString, QString>> mruItems;
+	mruItems.reserve(mru.size());
+	for (const QString &u : mru) {
+		const QString name = b->sceneNameIfMainCanvas(u);
+		if (!name.isEmpty())
+			mruItems.push_back({u, name});
+	}
+	const int live_ = mruItems.size();
 
 	// chip 宽度按当前可用宽度均分，而不是恒用上限。恒用上限时五个 chip 在真机 449 逻辑像素
 	// 宽的 dock 里必然溢出，滚动区就常驻一条 12px 高的横向滚动条——MRU 区域从 34px 涨到 46px，
 	// 在一个 dock 里这点纵向空间不便宜。均分后常见宽度下不再出现滚动条；窄到连下限都放不下时
 	// 才让它出现，那种宽度下本来也塞不进五个有名字的按钮。
-	int live_ = 0;
-	for (const QString &u : mru)
-		if (names.count(u))
-			++live_;
 	// 用 dock 自己的宽度算，不用滚动区的 viewport 宽度：refreshMru 是从 resizeEvent 里
 	// 调的，那一刻 viewport 还停在上一轮的几何上（量具实测：dock 200 时 viewport 报 100），
 	// 拿它当可用宽度会把「放得下」判成放不下，整条被藏掉。
@@ -1165,17 +1417,12 @@ void TreeDock::refreshMru()
 			if (n * w + chrome > avail)
 				continue;
 			bool ok = true;
-			int seen = 0;
-			for (const QString &u : mru) {
-				auto it = names.find(u);
-				if (it == names.end())
-					continue;
-				if (++seen > n)
-					break;
-				const int full = fm.horizontalAdvance(it->second);
+			for (int i = 0; i < n; ++i) {
+				const QString &name = mruItems[i].second;
+				const int full = fm.horizontalAdvance(name);
 				ok = strict ? full <= w - 16
-					    : fm.horizontalAdvance(fm.elidedText(it->second, Qt::ElideMiddle,
-										 w - 16)) >= kMruChipMinText;
+					    : fm.horizontalAdvance(fm.elidedText(name, Qt::ElideMiddle, w - 16)) >=
+						      kMruChipMinText;
 				if (!ok)
 					break;
 			}
@@ -1195,7 +1442,7 @@ void TreeDock::refreshMru()
 		cap = qMax(40, avail - (live_ > 1 ? kMruOverflowWidth + 10 : 8));
 	}
 
-	int inserted = 0;
+	const int inserted = show;
 	// 条高取**不受宽度约束时**的 chip 高度，一次量好。被压窄的按钮 sizeHint 会变高
 	// （量具实测窄 dock 上 36、宽 dock 上 24），拿它定条高就等于让条高跟着 dock 宽度跳——
 	// 拖一下 dock，整棵树上下爬 12px。
@@ -1205,52 +1452,64 @@ void TreeDock::refreshMru()
 		probe.setAutoRaise(true);
 		chipH = probe.sizeHint().height();
 	}
-	for (const QString &u : mru) {
-		auto it = names.find(u);
-		if (it == names.end())
-			continue;
-		if (inserted >= show)
-			break; // 放不下的不画，而不是画出来再挤扁
-		auto *chip = new QToolButton(mruBar_);
-		chip->setAutoRaise(true);
-		// 场景名可以很长（真机上单个 chip 自然宽度达 231px）。定宽 + 省略，全名进 tooltip。
-		// 省略位置取中间而非结尾：OBS 里的场景名普遍按类别加前缀（真机上就有
-		// 「YY开播-去背景|加底图」与「YY开播-小头像」），从尾部截会把两枚都截成
-		// 「YY开播-…」——两个按钮长得一模一样，等于没有。从中间截保住首尾，
-		// 「YY开…加底图」与「YY开…小头像」仍可区分。
-		// 定宽而不是设上限：上限只封顶不收底，短名字那几枚各自缩成自己的宽度，
-		// 一排 chip 就排出参差的右边（量具实测同一档 dock 里 108 / 106 / 87 / 69）。
-		chip->setFixedWidth(cap);
-		chip->setText(fm.elidedText(it->second, Qt::ElideMiddle, cap - 16));
-		chip->setToolTip(it->second);
-		connect(chip, &QToolButton::clicked, this, [u] { ObsBridge::get()->switchToScene(u); });
-		chip->setFixedHeight(chipH);
-		mruLayout_->insertWidget(inserted++, chip);
-	}
 	// 有最近场景被宽度挤掉时，给一个「⋯」把它们列全。不这么做，「放不下的」在界面上
 	// 毫无交代（日志里那句 dropped for width 只有开发者看得到），而 MRU 的价值恰恰
 	// 集中在最前面几个之外的中段。
-	if (inserted > 0 && inserted < live_) {
-		auto *more = new QToolButton(mruBar_);
-		more->setAutoRaise(true);
-		more->setText(QStringLiteral("⋯"));
-		more->setFixedWidth(kMruOverflowWidth - 2);
-		more->setFixedHeight(chipH);
-		more->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.ShowMru")));
-		auto *menu = new QMenu(more);
-		int seen = 0;
-		for (const QString &u : mru) {
-			auto it = names.find(u);
-			if (it == names.end())
-				continue;
-			if (++seen > inserted)
-				continue; // 条上已经有的不再重复列
-			const QString uuid = u, label = it->second;
-			connect(menu->addAction(label), &QAction::triggered, this,
+	const bool needMore = inserted > 0 && inserted < live_;
+	// 切换场景只改变 MRU 顺序，不必每点一次就销毁重建整条。只有 chip 数量或「⋯」
+	// 是否存在变化时才重建控件，其余情况只改文字/tooltip/宽度。
+	if ((int)mruChips_.size() != inserted || ((mruMore_ != nullptr) != needMore)) {
+		clearChips();
+		for (int i = 0; i < inserted; ++i) {
+			auto *chip = new QToolButton(mruBar_);
+			chip->setAutoRaise(true);
+			// uuid 放在 property 里，点击时现取：同一枚 chip 会随着 MRU 顺序换代表不同场景。
+			connect(chip, &QToolButton::clicked, this, [chip] {
+				const QString u = chip->property("uuid").toString();
+				if (!u.isEmpty())
+					ObsBridge::get()->switchToScene(u);
+			});
+			mruChips_.push_back(chip);
+			mruLayout_->insertWidget(i, chip);
+		}
+		if (needMore) {
+			mruMore_ = new QToolButton(mruBar_);
+			mruMore_->setAutoRaise(true);
+			mruMore_->setText(QStringLiteral("⋯"));
+			mruMore_->setFixedWidth(kMruOverflowWidth - 2);
+			mruMore_->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Opt.ShowMru")));
+			mruMore_->setAccessibleName(mruMore_->toolTip());
+			mruMoreMenu_ = new QMenu(mruMore_);
+			mruMore_->setMenu(mruMoreMenu_);
+			mruLayout_->insertWidget(inserted, mruMore_);
+		}
+	}
+	// 场景名可以很长（真机上单个 chip 自然宽度达 231px）。定宽 + 省略，全名进 tooltip。
+	// 省略位置取中间而非结尾：OBS 里的场景名普遍按类别加前缀（真机上就有
+	// 「YY开播-去背景|加底图」与「YY开播-小头像」），从尾部截会把两枚都截成
+	// 「YY开播-…」——两个按钮长得一模一样，等于没有。从中间截保住首尾，
+	// 「YY开…加底图」与「YY开…小头像」仍可区分。
+	// 定宽而不是设上限：上限只封顶不收底，短名字那几枚各自缩成自己的宽度，
+	// 一排 chip 就排出参差的右边（量具实测同一档 dock 里 108 / 106 / 87 / 69）。
+	for (int i = 0; i < inserted; ++i) {
+		auto *chip = mruChips_[i];
+		const QString &uuid = mruItems[i].first;
+		const QString &name = mruItems[i].second;
+		chip->setProperty("uuid", uuid);
+		chip->setFixedWidth(cap);
+		chip->setText(fm.elidedText(name, Qt::ElideMiddle, cap - 16));
+		chip->setToolTip(name);
+		chip->setAccessibleName(name); // 显示文本是省略过的，读屏要拿全名
+		chip->setFixedHeight(chipH);
+	}
+	if (mruMore_) {
+		mruMore_->setFixedHeight(chipH);
+		mruMoreMenu_->clear();
+		for (int i = inserted; i < live_; ++i) {
+			const QString uuid = mruItems[i].first;
+			connect(mruMoreMenu_->addAction(mruItems[i].second), &QAction::triggered, this,
 				[uuid] { ObsBridge::get()->switchToScene(uuid); });
 		}
-		more->setMenu(menu);
-		mruLayout_->insertWidget(inserted++, more);
 	}
 	mruScroll_->setVisible(inserted > 0);
 	if (inserted > 0) {
@@ -1285,9 +1544,15 @@ void TreeDock::onContextMenu(const QPoint &pos)
 {
 	auto *b = ObsBridge::get();
 	QMenu menu(this);
+	// 菜单里好几项靠 tooltip 说明后果（删除场景可撤销、粘贴滤镜要先复制、选中即切换会真切画面、
+	// 解散与删除文件夹的差别）。QMenu 默认不显示 action tooltip——只在文件夹分支打开过，
+	// 场景菜单与空白区/⋯ 菜单里的说明因此一直是死的。
+	menu.setToolTipsVisible(true);
 	const QModelIndex pi = view_->indexAt(pos);
 	QStandardItem *it = pi.isValid() ? itemAtSourceIndex(pi) : nullptr;
 	const int kind = it ? it->data(RoleKind).toInt() : -1;
+	const bool canCreate = search_->text().isEmpty();
+	const QString createBlockedTip = QString::fromUtf8(obs_module_text("SceneAnchor.FilterNoDrag"));
 
 	auto addColorMenu = [&](QStandardItem *target) {
 		QMenu *cm = menu.addMenu(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Color")));
@@ -1425,7 +1690,7 @@ void TreeDock::onContextMenu(const QPoint &pos)
 					: sc->name();
 			// 报物理分辨率：geometry() 给的是逻辑像素，150% 缩放下 2560×1440 的屏
 			// 会写成 1707x960（量具实测），用户拿自己那块屏的分辨率来找永远找不到。
-			// pin 的 Qt 6.8 还没有 QScreen::physicalGeometry()，按 devicePixelRatio 换算。
+			// 当前的 Qt 6.11 仍没有 QScreen::physicalGeometry()，按 devicePixelRatio 换算。
 			const qreal dpr = sc->devicePixelRatio();
 			const QSize px(int(sc->geometry().width() * dpr + 0.5),
 				       int(sc->geometry().height() * dpr + 0.5));
@@ -1538,16 +1803,21 @@ void TreeDock::onContextMenu(const QPoint &pos)
 		const QString cv = it->data(RoleCanvas).toString();
 		const NodePath p = pathOfItem(it);
 		QAction *addSub = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.AddSubfolder")));
-		connect(addSub, &QAction::triggered, this, [b, cv, p] {
-			b->applyTreeOp(obs_module_text("SceneAnchor.Undo.AddFolder"), [&] {
-				return b->store.insertFolder(
-					cv, p, INT_MAX, QString::fromUtf8(obs_module_text("SceneAnchor.NewFolder")));
-			});
-		});
+		addSub->setEnabled(canCreate);
+		if (!canCreate)
+			addSub->setToolTip(createBlockedTip);
+		connect(addSub, &QAction::triggered, this, [this, cv, p] { addFolder(cv, p, INT_MAX); });
 		// 底部 ＋ 按钮在选中文件夹时就是「建到这个文件夹里」，菜单里却没有这条路——
 		// 同一能力两套入口形状，鼠标用户从菜单进不来。补上，走同一个 createSceneInFolder。
 		QAction *addSc = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.AddSceneHere")));
-		connect(addSc, &QAction::triggered, this, [b, cv, p] { b->createSceneInFolder(cv, p); });
+		addSc->setEnabled(canCreate);
+		if (!canCreate)
+			addSc->setToolTip(createBlockedTip);
+		connect(addSc, &QAction::triggered, this, [this, b, cv, p] {
+			if (!search_->text().isEmpty())
+				return;
+			b->createSceneInFolder(cv, p);
+		});
 		// fix round 1 Important：同场景分支，不捕获 pi，按 (cv, p) 在点击时重新定位。
 		// 键盘手势此前在界面上零可见性：F2 改名实现了但没有任何地方说。用 \t 把键位
 		// 排到菜单右侧那一列——**只显字不注册** QAction 快捷键：注册会抢 OBS 的全局键
@@ -1561,7 +1831,6 @@ void TreeDock::onContextMenu(const QPoint &pos)
 		});
 		// 「解散」与「删除」在最常见的情形（顶层文件夹只装场景）下结果看着一样，
 		// 差别要到有嵌套子文件夹时才显现。菜单项本身说不清，挂 tooltip 说明后果。
-		menu.setToolTipsVisible(true);
 		QAction *diss = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.Dissolve")));
 		diss->setToolTip(QString::fromUtf8(obs_module_text("SceneAnchor.Menu.DissolveTip")));
 		connect(diss, &QAction::triggered, this, [b, cv, p] {
@@ -1579,8 +1848,14 @@ void TreeDock::onContextMenu(const QPoint &pos)
 	} else {
 		// 空白区
 		QAction *addF = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.AddFolder")));
+		addF->setEnabled(canCreate);
+		if (!canCreate)
+			addF->setToolTip(createBlockedTip);
 		connect(addF, &QAction::triggered, btnAddFolder_, &QToolButton::click);
 		QAction *addS = menu.addAction(QString::fromUtf8(obs_module_text("SceneAnchor.AddScene")));
+		addS->setEnabled(canCreate);
+		if (!canCreate)
+			addS->setToolTip(createBlockedTip);
 		connect(addS, &QAction::triggered, btnAddScene_, &QToolButton::click);
 		menu.addSeparator();
 		buildSettingsMenu(menu);

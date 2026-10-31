@@ -26,6 +26,9 @@ public:
 	std::vector<LiveCanvas> liveCanvases() const;
 	QString currentSceneUuid() const;   // program
 	QString currentPreviewUuid() const; // studio preview，非 studio 返回 ""
+	// 单个主画布场景的实时名；uuid 不是主画布场景时返回空。给 MRU 条用——它每次切换
+	// 只需要最近几个名字，不值得为它枚举整个场景列表（见 refreshMru）。
+	QString sceneNameIfMainCanvas(const QString &uuid) const;
 
 	// 树操作统一入口：JSON diff → 无变化则丢弃；有变化 → undo 注册 + 防抖保存 + 重建
 	void applyTreeOp(const char *undoName, const std::function<bool()> &op);
@@ -89,4 +92,9 @@ private:
 	obs_hotkey_id focusSearchHotkey_ = OBS_INVALID_HOTKEY_ID;
 	QTimer saveTimer_;
 	QString copyFiltersUuid_; // copyFilters 记的源场景 uuid；空 = 未复制
+	// OBS 33 在发出 EXIT 后立即销毁 frontend callbacks，随后才走 obs_module_unload。
+	// 之后调用 obs_frontend_remove_* 只会让 OBS 打 ERROR「with no callbacks」。
+	// EXIT 时置 false，析构只做 libobs 侧清理；正常退出前 OBS 已经 saveAll()，
+	// 集合数据与热键都落盘，不依赖这最后的删除。
+	bool frontendAlive_ = true;
 };

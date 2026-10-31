@@ -336,6 +336,12 @@ QString ObsBridge::currentPreviewUuid() const
 	return g_preview;
 }
 
+QString ObsBridge::sceneNameIfMainCanvas(const QString &uuid) const
+{
+	const int i = sceneIndex(uuid);
+	return i < 0 ? QString() : g_scenes[static_cast<size_t>(i)].name;
+}
+
 void ObsBridge::applyTreeOp(const char *undoName, const std::function<bool()> &op)
 {
 	g_log << QString("applyTreeOp %1").arg(QString::fromUtf8(undoName));

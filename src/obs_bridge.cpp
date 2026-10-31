@@ -85,8 +85,13 @@ ObsBridge::~ObsBridge()
 {
 	unregisterHotkeys();
 	signal_handler_disconnect(obs_get_signal_handler(), "source_rename", &ObsBridge::sourceRenamed, this);
-	obs_frontend_remove_save_callback(&ObsBridge::frontendSaveLoad, this);
-	obs_frontend_remove_event_callback(&ObsBridge::frontendEvent, this);
+	// 正常退出走 EXIT → frontendAlive_ = false，此时前端 API 已被 OBS 拆掉，
+	// 再 remove 只会得到「Tried to call ... with no callbacks!」的 ERROR 日志。
+	// 插件在运行期被卸载（前端还活着）时仍要摘掉回调，避免悬挂。
+	if (frontendAlive_) {
+		obs_frontend_remove_save_callback(&ObsBridge::frontendSaveLoad, this);
+		obs_frontend_remove_event_callback(&ObsBridge::frontendEvent, this);
+	}
 }
 
 void ObsBridge::markDirty()
@@ -163,6 +168,13 @@ void ObsBridge::frontendEvent(enum obs_frontend_event event, void *ptr)
 	case OBS_FRONTEND_EVENT_THEME_CHANGED:
 		emit b->needsRebuild();
 		break;
+	case OBS_FRONTEND_EVENT_EXIT:
+		// OBS 33 的关闭顺序：saveAll() 已把集合和热键落盘 → ClearSceneData() →
+		// 发本事件 → 销毁 frontend callbacks → obs_module_unload。停掉防抖定时器，
+		// 并让析构跳过前端 API（见 frontendAlive_ 的注释）。
+		b->saveTimer_.stop();
+		b->frontendAlive_ = false;
+		break;
 	default:
 		break;
 	}
@@ -184,7 +196,7 @@ void ObsBridge::sourceRenamed(void *ptr, calldata_t *cd)
 // 只报告主画布。副画布（Aitum Vertical 等插件用 obs_frontend_add_canvas 建的）故意不进树，
 // 理由是"切不了就不该占位"：
 //
-// OBS 32 没有"设置某画布当前场景"的 API —— frontend 层只有 get_canvases / add_canvas /
+// OBS 33 没有"设置某画布当前场景"的 API —— frontend 层只有 get_canvases / add_canvas /
 // remove_canvas。唯一沾边的 obs_canvas_set_channel(cv, 0, scene) 不是出路：OBS 前端自己
 // 从不调用它（libobs 里唯一调用点是 obs_set_output_source 内部、且只对主画布，obs.c:1815），
 // 而且建画布的插件通常在 channel 0 上挂的是**转场源而非场景**（Aitum Vertical 的
@@ -250,6 +262,31 @@ QString ObsBridge::currentPreviewUuid() const
 	const QString u = QString::fromUtf8(obs_source_get_uuid(s));
 	obs_source_release(s);
 	return u;
+}
+
+QString ObsBridge::sceneNameIfMainCanvas(const QString &uuid) const
+{
+	if (uuid.isEmpty())
+		return {};
+	obs_source_t *s = obs_get_source_by_uuid(uuid.toUtf8().constData());
+	if (!s)
+		return {};
+	if (!obs_scene_from_source(s)) {
+		obs_source_release(s);
+		return {};
+	}
+	obs_canvas_t *cv = obs_source_get_canvas(s);
+	const QString name = QString::fromUtf8(obs_source_get_name(s));
+	bool main = true; // 未挂画布 == 主画布，口径同 liveCanvases()
+	if (cv) {
+		obs_canvas_t *mc = obs_get_main_canvas();
+		main = mc && QString::fromUtf8(obs_canvas_get_uuid(cv)) == QString::fromUtf8(obs_canvas_get_uuid(mc));
+		if (mc)
+			obs_canvas_release(mc);
+		obs_canvas_release(cv);
+	}
+	obs_source_release(s);
+	return main ? name : QString();
 }
 
 // obs_get_source_by_uuid 全局解析（libobs/obs.c:2031-2034 查 obs->data.sources），但下面两个函数

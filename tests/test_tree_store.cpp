@@ -56,6 +56,24 @@ static void test_roundtrip()
 	CHECK(t.mru() == QStringList{QStringLiteral("uuid-a")});
 }
 
+static void test_insert_folder_path()
+{
+	TreeStore s;
+	NodePath p;
+	CHECK(s.insertFolder("cv1", {}, 0, "A", &p));
+	CHECK(p == (NodePath{0}));
+	NodePath q;
+	CHECK(s.insertFolder("cv1", {0}, 0, "B", &q));
+	CHECK(q == (NodePath{0, 0}));
+	// 越界 index 走 clamp，回报的必须是真正落下的位置——新建文件夹后靠它找回那一行。
+	NodePath r;
+	CHECK(s.insertFolder("cv1", {}, 99, "C", &r));
+	CHECK(r == (NodePath{1}));
+	NodePath bad;
+	CHECK(!s.insertFolder("cv1", {42}, 0, "D", &bad));
+	CHECK(bad.empty());
+}
+
 static void test_bad_json()
 {
 	TreeStore s;
@@ -538,6 +556,28 @@ static void test_contrast()
 		CHECK(contrastOf(li, selLight) >= kMinContrast);
 	}
 
+	// 自定义色可能故意贴近背景：深色主题的近黑深蓝、浅色主题的近白浅黄。
+	// 图形与文字两个门槛都要过，且两块背景（普通行/选中行）都要过。
+	auto checkCustom = [](const QVector<QColor> &bgs) {
+		for (const char *hex : {"#101020", "#FDFDD0"}) {
+			const QColor raw(hex);
+			const QColor icon = readableOn(raw, bgs, kMinContrast);
+			const QColor text = readableOn(raw, bgs, kMinTextContrast);
+			for (const QColor &bg : bgs) {
+				CHECK(contrastOf(icon, bg) >= kMinContrast);
+				CHECK(contrastOf(text, bg) >= kMinTextContrast);
+			}
+			// 自定义色换主题时只能改明度，色相/饱和度必须还是用户选的那支
+			float h0 = 0, s0 = 0, l0 = 0, a0 = 1, h1 = 0, s1 = 0, l1 = 0, a1 = 1;
+			raw.getHslF(&h0, &s0, &l0, &a0);
+			icon.getHslF(&h1, &s1, &l1, &a1);
+			CHECK(std::fabs(h0 - h1) < 0.01);
+			CHECK(std::fabs(s0 - s1) < 0.05);
+		}
+	};
+	checkCustom(darkBgs);
+	checkCustom(lightBgs);
+
 	// 已经达标的原色必须一个像素都不动（标签色是用户数据，无必要不改）
 	const QColor pass("#ffffff");
 	CHECK(readableOn(pass, darkBgs, kMinTextContrast) == pass);
@@ -558,6 +598,7 @@ static void test_contrast()
 int main()
 {
 	test_roundtrip();
+	test_insert_folder_path();
 	test_bad_json();
 	test_foreign_version();
 	test_failed_op_leaves_store_untouched();

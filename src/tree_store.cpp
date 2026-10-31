@@ -98,7 +98,8 @@ const std::vector<std::unique_ptr<TreeNode>> *TreeStore::canvasRoot(const QStrin
 	return it == roots_.end() ? nullptr : &it->second.children;
 }
 
-bool TreeStore::insertFolder(const QString &canvas, const NodePath &parent, int index, const QString &name)
+bool TreeStore::insertFolder(const QString &canvas, const NodePath &parent, int index, const QString &name,
+			     NodePath *insertedPath)
 {
 	TreeNode *p = mutableNodeAt(canvas, parent);
 	if (!p || p->type != TreeNode::Folder)
@@ -108,6 +109,10 @@ bool TreeStore::insertFolder(const QString &canvas, const NodePath &parent, int 
 	n->name = name;
 	const int i = std::clamp(index, 0, (int)p->children.size());
 	p->children.insert(p->children.begin() + i, std::move(n));
+	if (insertedPath) {
+		*insertedPath = parent;
+		insertedPath->push_back(i);
+	}
 	return true;
 }
 

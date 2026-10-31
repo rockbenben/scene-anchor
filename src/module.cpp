@@ -34,4 +34,5 @@ bool obs_module_load(void)
 void obs_module_unload(void)
 {
 	ObsBridge::destroy(); // dock 由 OBS 前端先行销毁
+	obs_log(LOG_INFO, "plugin unloaded");
 }

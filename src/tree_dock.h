@@ -3,12 +3,16 @@
 
 #pragma once
 #include "projection.h"
+#include <QHash>
+#include <QIcon>
 #include <QStandardItemModel>
+#include <QTimer>
 #include <QTreeView>
 #include <QWidget>
 
 class QLabel;
 class QLineEdit;
+class QMenu;
 class QSortFilterProxyModel;
 class QHBoxLayout;
 class QScrollArea;
@@ -55,9 +59,15 @@ private:
 	QStandardItem *itemAtSourceIndex(const QModelIndex &proxyIdx) const; // proxy → source item
 	NodePath pathOfItem(const QStandardItem *it) const;
 	void refreshMru(); // store.mru() → mruBar_ 里的可点击 chips（只做主画布）
+	// 只改旧/新 program/preview 涉及的行。之前每次切换都遍历整棵树 setFont，
+	// 600 场景时这会是 O(N) 的 dataChanged 风暴。
+	void applySceneHighlight(const QString &prog, const QString &prev);
 	// 三个行为/显示开关那一组。空白区右键菜单与底部「⋯」按钮共用同一份构造——
 	// 开关只藏在一个入口里的话，不知道那个入口的人就永远看不到它们。
 	void buildSettingsMenu(QMenu &menu);
+	void addFolder(const QString &canvas, const NodePath &parent, int index);
+	void updateCreateAvailability(); // 搜索过滤时新建入口不可用，并说明原因
+	void updateRemoveTooltip();      // 垃圾桶的后果随当前选中项变化
 	// chip 宽度按可用宽度均分，dock 被拖宽/拖窄后需要重算，否则要么留白要么冒出滚动条。
 	// 用宽度差阈值挡住抖动，也顺带杜绝 refreshMru → 建 chip → 再触发 resize 的回环。
 	void resizeEvent(QResizeEvent *e) override;
@@ -78,12 +88,23 @@ private:
 	QWidget *mruBar_ = nullptr;        // chips 的宿主，装在 mruScroll_ 里
 	QScrollArea *mruScroll_ = nullptr; // 切断 chip 宽度对 dock 最小宽度的传导
 	QHBoxLayout *mruLayout_ = nullptr;
+	// chips 复用：切换场景只改 MRU 顺序，没必要每点一次就销毁重建整条。
+	QVector<QToolButton *> mruChips_;
+	QToolButton *mruMore_ = nullptr;
+	QMenu *mruMoreMenu_ = nullptr;
 	QTreeView *view_ = nullptr;
 	AnchorModel *model_ = nullptr;
 	QSortFilterProxyModel *proxy_ = nullptr;
+	// uuid → 场景行。切换高亮只查这几个 key，不再全树扫描。
+	QHash<QString, QStandardItem *> sceneItems_;
+	QString lastProg_, lastPrev_;
+	QHash<QString, QIcon> tintedIcons_; // key: 基础图标 cacheKey + 颜色
 	QToolButton *btnAddScene_ = nullptr, *btnAddFolder_ = nullptr, *btnRemove_ = nullptr;
 	QToolButton *btnSettings_ = nullptr;
 	bool rebuilding_ = false;
+	quint64 expansionGeneration_ = 0; // 延后应用展开态时，丢弃已被新 rebuild 淘汰的模型指针
+	QTimer clickSwitchTimer_;         // 单击切换等过一个双击间隔，避免吞掉双击动作
+	QString pendingClickUuid_;
 	// J-7 改名缺口（K-2②）：itemChanged 里改名一个 Folder 后，紧接着触发的这次 rebuild() 要用
 	// "刚提交的新名字"去匹配选中恢复，而不是重新信任 it->text()（改名与嵌套重建之间的时序不保证
 	// 总是已经生效）。改名操作把目标 (canvas, path, newName) 记在这里，rebuild() 消费一次后清空，
@@ -92,4 +113,9 @@ private:
 	NodePath pendingRenamePath_;
 	QString pendingRenameName_;
 	bool hasPendingRename_ = false;
+	// 新建文件夹后自动进入改名：把刚插入的位置记下来，等队列里的这次 rebuild 完成后
+	// 找到对应行、展开父链、选中并打开编辑器。只消费一次。
+	QString pendingEditCanvas_;
+	NodePath pendingEditPath_;
+	bool hasPendingEdit_ = false;
 };

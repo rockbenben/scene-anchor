@@ -40,7 +40,8 @@ class TreeStore {
 public:
 	// 变更器：返回 false = 操作结构非法（坏路径等），store 未动。
 	// 是否"真的变了"由调用方比较 toJson() 前后判断（ObsBridge::applyTreeOp）。
-	bool insertFolder(const QString &canvas, const NodePath &parent, int index, const QString &name);
+	bool insertFolder(const QString &canvas, const NodePath &parent, int index, const QString &name,
+			  NodePath *insertedPath = nullptr);
 	bool renameFolder(const QString &canvas, const NodePath &path, const QString &name);
 	bool dissolveFolder(const QString &canvas, const NodePath &path); // 子项上移到原位置
 	bool removeNode(const QString &canvas, const NodePath &path);     // 节点+子树移出 store（不碰 OBS 场景）
