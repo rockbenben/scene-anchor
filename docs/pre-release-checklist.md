@@ -13,7 +13,8 @@
 > 第 4（集合复制/切换/重命名/强杀）与第 18（热键）已于 2026-10-31 补跑通过，细节见两项末尾；
 > 第 9 项没有副画布插件，不适用。**2026-10-31 发布前状态：第 1–8、10–13、15–20 项已通过；
 > 第 14 项已于 2026-10-31 在 33.0.0 全新配置上补测通过；第 15 项的自定义色对话框点选、第 18 项的
-> 物理热键与 Studio Mode 分支仍按各项末尾说明留待人工补做；第 21 项（Windows 升级安装）也待跑。**
+> 物理热键与 Studio Mode 分支仍按各项末尾说明留待人工补做；第 21 项已于 2026-10-31 在 ProgramData
+> 与便携版两种布局上通过。**
 >
 > **2026-10-31 实时路径优化后补充（Windows 真机 OBS 33.0.x）**：MRU 按 uuid 取名与 chip 点击、
 > `none` 模式单击立即切换、`transition` 模式仍等一个双击间隔，以及第 20 项关闭日志（无插件的
@@ -437,3 +438,9 @@ dock->setFloating(true);    // 强制浮动
 **要看什么**：1.0.1 的旧位置被清掉——普通安装的 `...\scene-anchor\bin\64bit`，便携版的 `<OBS>\obs-plugins\64bit\scene-anchor.dll` 与 `<OBS>\data\obs-plugins\scene-anchor`；新文件在 `...\plugins\scene-anchor\scene-anchor.dll`。OBS 插件管理器里显示 2.0.0，且只加载一份插件；打开原场景集合，文件夹树与升级前一致。
 
 **失败长什么样**：新旧两份 DLL 同时被扫到、插件管理器仍显示 1.0.1、OBS 启动报重复模块，或升级后树丢失。
+
+> **2026-10-31 本机通过（ProgramData + 便携版）。** 先把旧插件摆成手动安装、无卸载键的 legacy 布局，
+> 再用 2.0.0 安装包覆盖：ProgramData 的 `scene-anchor\bin\64bit` 与便携版的 `obs-plugins\64bit`、
+> `data\obs-plugins\scene-anchor` 都被一次清掉，新布局只剩 `scene-anchor.dll + data`。便携版启动后日志只有一条
+> `[scene-anchor] plugin loaded successfully (version 2.0.0)`，`plugin_manager/modules.json` 也是 2.0.0，
+> 9 行树与升级前一致。

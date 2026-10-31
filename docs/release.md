@@ -49,7 +49,7 @@ Ubuntu 26.04 的系统源 OBS 仍是 32.1；上表的 `.deb` 只适用于 OBS 33
 ```markdown
 **Requires OBS Studio 33 or newer.** OBS 32 users should stay on 1.0.1. On Ubuntu 26.04, install OBS 33 from the [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) first — the archive's OBS is 32.1.
 
-The Windows installer removes the 1.0.1 legacy files (the old `...\scene-anchor\bin\64bit` under ProgramData and `obs-plugins\64bit` + `data\obs-plugins\scene-anchor` in a portable OBS) and installs under `<plugins>\scene-anchor\`. Close OBS before upgrading.
+The Windows installer removes the 1.0.x legacy files (the old `...\scene-anchor\bin\64bit` under ProgramData and `obs-plugins\64bit` + `data\obs-plugins\scene-anchor` in a portable OBS), even when the old copy was installed by hand and has no uninstall key. It installs under `<plugins>\scene-anchor\`. Close OBS before upgrading.
 
 <one-paragraph summary in English>
 
@@ -77,7 +77,7 @@ The Windows installer removes the 1.0.1 legacy files (the old `...\scene-anchor\
 
 **需要 OBS Studio 33 或更新版本。** OBS 32 用户请留在 1.0.1。Ubuntu 26.04 用户请先从 [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) 装 OBS 33——官方源里的 OBS 是 32.1。
 
-Windows 安装包会清掉 1.0.1 的旧文件（ProgramData 下的 `...\scene-anchor\bin\64bit`，便携版里的 `obs-plugins\64bit` 与 `data\obs-plugins\scene-anchor`），改装到 `<plugins>\scene-anchor\`。升级前请关闭 OBS。
+Windows 安装包会清掉 1.0.x 的旧文件（ProgramData 下的 `...\scene-anchor\bin\64bit`，便携版里的 `obs-plugins\64bit` 与 `data\obs-plugins\scene-anchor`），即使旧版是手动解压、没有卸载键也会清；然后改装到 `<plugins>\scene-anchor\`。升级前请关闭 OBS。
 
 <一段中文摘要>
 
