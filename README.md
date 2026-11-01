@@ -76,7 +76,7 @@ Restart OBS after any of these.
 
 **Linux: install OBS 33 first.** Ubuntu 26.04's archive still ships OBS 32.1, which cannot load this plugin. Install OBS Studio 33 from the [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) (`sudo add-apt-repository ppa:obsproject/obs-studio && sudo apt update && sudo apt install obs-studio`), then install the `.deb`.
 
-**After installing, enable the dock.** SceneAnchor's dock is not visible by default — OBS does not automatically show new plugin docks. Open OBS's **Docks** menu (View → Docks on some platforms) and check **SceneAnchor** to make it appear. If you don't see the dock after installing, this is almost always the reason — the plugin has not failed to load.
+**After installing, enable the dock.** SceneAnchor's dock is not visible by default — OBS does not automatically show new plugin docks. Open OBS's **Docks** menu on the menu bar and check **SceneAnchor** to make it appear. If you don't see the dock after installing, this is almost always the reason — the plugin has not failed to load.
 
 ## Limitations
 

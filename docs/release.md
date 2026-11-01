@@ -63,7 +63,7 @@ The Windows installer removes the 1.0.x legacy files (the old `...\scene-anchor\
 | `scene-anchor-<version>-x86_64-linux-gnu.deb` | Ubuntu 26.04 — `sudo apt install ./scene-anchor-<version>-x86_64-linux-gnu.deb` |
 | `-dbgsym.ddeb`, `-source.tar.xz` | Debug symbols and source. Not needed for normal use. |
 
-**After installing, turn the dock on: View → Docks → SceneAnchor.** It is hidden by default.
+**After installing, turn the dock on: the Docks menu on the menu bar → SceneAnchor.** It is hidden by default.
 
 ## Changed
 
@@ -89,7 +89,7 @@ Windows 安装包会清掉 1.0.x 的旧文件（ProgramData 下的 `...\scene-an
 
 - <中文条目>
 
-安装后记得打开面板：视图 → 停靠部件 → SceneAnchor。它默认是隐藏的。
+安装后记得打开面板：菜单栏的「停靠窗口」→「场景锚点」（界面是英文时那一项叫 SceneAnchor）。它默认是隐藏的。
 
 ---
 

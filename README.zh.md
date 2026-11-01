@@ -76,7 +76,7 @@ C:\ProgramData\obs-studio\plugins\scene-anchor\data\locale\zh-CN.ini
 
 **Linux：先装 OBS 33。** Ubuntu 26.04 官方源里的 OBS 仍是 32.1，加载不了本插件。先按 [OBS PPA](https://launchpad.net/~obsproject/+archive/ubuntu/obs-studio) 装 OBS 33（`sudo add-apt-repository ppa:obsproject/obs-studio && sudo apt update && sudo apt install obs-studio`），再装 `.deb`。
 
-**装好之后要手动打开面板。** SceneAnchor 的面板默认不可见——OBS 不会自动显示新插件的面板。打开 OBS 的**停靠部件**菜单（某些平台在 视图 → 停靠部件 下），勾选 **SceneAnchor** 就出来了。装完看不到面板，几乎都是这个原因，不是插件加载失败。
+**装好之后要手动打开面板。** SceneAnchor 的面板默认不可见——OBS 不会自动显示新插件的面板。打开 OBS 菜单栏的**停靠窗口**菜单，勾选**场景锚点**（英文界面下那一项叫 **SceneAnchor**）就出来了。装完看不到面板，几乎都是这个原因，不是插件加载失败。
 
 ## 已知限制
 
